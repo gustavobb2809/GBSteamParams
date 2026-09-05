@@ -12,6 +12,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -80,23 +81,60 @@ class DetailPanel(QWidget):
         self.gamescope_box = QGroupBox("gamescope")
         self.gamescope_box.setCheckable(True)
         gs_form = QFormLayout(self.gamescope_box)
+        self.gs_render_width = QLineEdit()
+        self.gs_render_width.setPlaceholderText("ex: 1280 (renderiza menor, upscale p/ Largura)")
+        self.gs_render_height = QLineEdit()
+        self.gs_render_height.setPlaceholderText("ex: 800 (opcional)")
         self.gs_width = QLineEdit()
         self.gs_width.setPlaceholderText("ex: 2560")
         self.gs_height = QLineEdit()
         self.gs_height.setPlaceholderText("ex: 1440")
         self.gs_refresh = QLineEdit()
         self.gs_refresh.setPlaceholderText("ex: 165 (opcional)")
+        self.gs_filter = QComboBox()
+        self.gs_filter.addItem("(padrao)", "")
+        for label, value in [
+            ("Linear", "linear"),
+            ("Nearest", "nearest"),
+            ("FSR", "fsr"),
+            ("NIS", "nis"),
+            ("Pixel", "pixel"),
+        ]:
+            self.gs_filter.addItem(label, value)
         self.gs_fullscreen = QCheckBox("Tela cheia (-f)")
         self.gs_borderless = QCheckBox("Sem bordas (-b)")
+        self.gs_steam = QCheckBox("Integracao com overlay da Steam (-e)")
+        self.gs_adaptive_sync = QCheckBox("Adaptive Sync / VRR (--adaptive-sync)")
+        self.gs_framerate_limit = QLineEdit()
+        self.gs_framerate_limit.setPlaceholderText("ex: 60 (opcional)")
         self.gs_extra = QLineEdit()
         self.gs_extra.setPlaceholderText("flags extras do gamescope (opcional)")
+        gs_form.addRow("Resolucao interna (largura)", self.gs_render_width)
+        gs_form.addRow("Resolucao interna (altura)", self.gs_render_height)
         gs_form.addRow("Largura", self.gs_width)
         gs_form.addRow("Altura", self.gs_height)
         gs_form.addRow("Taxa de atualizacao", self.gs_refresh)
+        gs_form.addRow("Filtro de upscaling", self.gs_filter)
         gs_form.addRow(self.gs_fullscreen)
         gs_form.addRow(self.gs_borderless)
+        gs_form.addRow(self.gs_steam)
+        gs_form.addRow(self.gs_adaptive_sync)
+        gs_form.addRow("Limite de FPS", self.gs_framerate_limit)
         gs_form.addRow("Extra", self.gs_extra)
         controls_layout.addWidget(self.gamescope_box)
+
+        self.proton_box = QGroupBox("Proton / Wine (avancado)")
+        proton_form = QFormLayout(self.proton_box)
+        self.proton_no_esync = QCheckBox("Desativar ESync (PROTON_NO_ESYNC)")
+        self.proton_no_fsync = QCheckBox("Desativar FSync (PROTON_NO_FSYNC)")
+        self.proton_nvapi = QCheckBox("Habilitar NVAPI / DLSS (PROTON_ENABLE_NVAPI)")
+        self.proton_vkd3d = QLineEdit()
+        self.proton_vkd3d.setPlaceholderText("ex: dxr,dxr11 (ray tracing DX12, opcional)")
+        proton_form.addRow(self.proton_no_esync)
+        proton_form.addRow(self.proton_no_fsync)
+        proton_form.addRow(self.proton_nvapi)
+        proton_form.addRow("VKD3D_CONFIG", self.proton_vkd3d)
+        controls_layout.addWidget(self.proton_box)
 
         extra_form = QFormLayout()
         self.extra_edit = QLineEdit()
@@ -127,16 +165,26 @@ class DetailPanel(QWidget):
             self.gamemode_check,
             self.mangohud_check,
             self.gamescope_box,
+            self.gs_render_width,
+            self.gs_render_height,
             self.gs_width,
             self.gs_height,
             self.gs_refresh,
             self.gs_fullscreen,
             self.gs_borderless,
+            self.gs_steam,
+            self.gs_adaptive_sync,
+            self.gs_framerate_limit,
             self.gs_extra,
+            self.proton_no_esync,
+            self.proton_no_fsync,
+            self.proton_nvapi,
+            self.proton_vkd3d,
             self.extra_edit,
         ):
             sig = getattr(w, "toggled", None) or getattr(w, "textChanged", None)
             sig.connect(self._refresh_preview)
+        self.gs_filter.currentIndexChanged.connect(self._refresh_preview)
 
         self.set_game(None)
 
@@ -178,12 +226,24 @@ class DetailPanel(QWidget):
 
         gs = parsed["gamescope"]
         self.gamescope_box.setChecked(bool(gs))
+        self.gs_render_width.setText(gs["render_width"] if gs else "")
+        self.gs_render_height.setText(gs["render_height"] if gs else "")
         self.gs_width.setText(gs["width"] if gs else "")
         self.gs_height.setText(gs["height"] if gs else "")
         self.gs_refresh.setText(gs["refresh"] if gs else "")
+        self.gs_filter.setCurrentIndex(self.gs_filter.findData(gs["filter"] if gs else ""))
         self.gs_fullscreen.setChecked(bool(gs and gs["fullscreen"]))
         self.gs_borderless.setChecked(bool(gs and gs["borderless"]))
+        self.gs_steam.setChecked(bool(gs and gs["steam"]))
+        self.gs_adaptive_sync.setChecked(bool(gs and gs["adaptive_sync"]))
+        self.gs_framerate_limit.setText(gs["framerate_limit"] if gs else "")
         self.gs_extra.setText(gs["extra"] if gs else "")
+
+        proton = parsed["proton"]
+        self.proton_no_esync.setChecked(proton["no_esync"])
+        self.proton_no_fsync.setChecked(proton["no_fsync"])
+        self.proton_nvapi.setChecked(proton["enable_nvapi"])
+        self.proton_vkd3d.setText(proton["vkd3d_config"])
 
         self.extra_edit.setText(parsed["extra"])
 
@@ -195,12 +255,26 @@ class DetailPanel(QWidget):
             return None
         return {
             "enabled": True,
+            "render_width": self.gs_render_width.text().strip(),
+            "render_height": self.gs_render_height.text().strip(),
             "width": self.gs_width.text().strip(),
             "height": self.gs_height.text().strip(),
             "refresh": self.gs_refresh.text().strip(),
+            "filter": self.gs_filter.currentData(),
             "fullscreen": self.gs_fullscreen.isChecked(),
             "borderless": self.gs_borderless.isChecked(),
+            "steam": self.gs_steam.isChecked(),
+            "adaptive_sync": self.gs_adaptive_sync.isChecked(),
+            "framerate_limit": self.gs_framerate_limit.text().strip(),
             "extra": self.gs_extra.text().strip(),
+        }
+
+    def _current_proton_dict(self):
+        return {
+            "no_esync": self.proton_no_esync.isChecked(),
+            "no_fsync": self.proton_no_fsync.isChecked(),
+            "enable_nvapi": self.proton_nvapi.isChecked(),
+            "vkd3d_config": self.proton_vkd3d.text().strip(),
         }
 
     def _refresh_preview(self, *_):
@@ -211,6 +285,7 @@ class DetailPanel(QWidget):
             self.mangohud_check.isChecked(),
             self._current_gamescope_dict(),
             self.extra_edit.text().strip(),
+            proton=self._current_proton_dict(),
         )
         self.preview.setText(new)
 
@@ -337,7 +412,16 @@ class MainWindow(QMainWindow):
                 row, 2, QTableWidgetItem(summary_for(game["value"], game["appid"], self.excluded))
             )
 
+    def _flush_detail(self):
+        """Grava no jogo selecionado o que esta no painel, mesmo sem clicar
+        em 'Aplicar a este jogo' — evita perder edicoes ao trocar de jogo
+        ou salvar."""
+        game = self.detail.game
+        if game and not game["excluded"]:
+            self.detail._apply()
+
     def _on_row_selected(self):
+        self._flush_detail()
         rows = self.table.selectionModel().selectedRows()
         if not rows:
             self.detail.set_game(None)
@@ -370,6 +454,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Aplicado", f"{count} jogo(s) atualizado(s) com gamemode+mangohud.")
 
     def _save(self):
+        self._flush_detail()
         if core.is_steam_running():
             resp = QMessageBox.warning(
                 self, "Steam aberta",

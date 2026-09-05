@@ -68,13 +68,28 @@ steam-boost-gui
 ```
 
 - Lista todos os jogos da sua conta à esquerda.
-- Selecione um jogo para ver/editar: gamemode, MangoHud, gamescope
-  (resolução, taxa de atualização, tela cheia, sem bordas) e opções extras.
+- Selecione um jogo para ver/editar:
+  - **gamemode** e **MangoHud** (liga/desliga simples).
+  - **gamescope**: resolução interna de render (`-w`/`-h`, upscaling) e de
+    saída (`-W`/`-H`), taxa de atualização, filtro de upscaling (linear,
+    nearest, FSR, NIS, pixel), tela cheia, sem bordas, integração com
+    overlay da Steam (`-e`), Adaptive Sync/VRR e limite de FPS.
+  - **Proton / Wine** (avançado): desativar ESync/FSync, habilitar
+    NVAPI/DLSS e `VKD3D_CONFIG` (ray tracing DX12).
+  - Opções extras livres (outras flags/env vars).
 - O preview mostra a string final de Launch Options em tempo real.
 - "Aplicar a este jogo" grava a mudança na memória; "Salvar alterações"
-  grava no disco (com backup automático).
+  grava no disco (com backup automático). Selecionar outro jogo ou clicar
+  em "Salvar alterações" já aplica automaticamente o que estiver no
+  painel, então não é preciso clicar em "Aplicar a este jogo" antes.
 - "Gerenciado manualmente" tira o jogo da lista de jogos que o
   `steam-boost` (CLI ou botão "aplicar a todos") mexe.
+
+![Mockup do painel de detalhes](docs/gui-mockup.png)
+
+> A imagem acima é um mockup de referência (tema escuro) usado para guiar
+> uma futura reorganização visual da GUI — hoje o app ainda usa os
+> widgets padrão do Qt/tema do sistema, sem esse estilo customizado.
 
 ## Sobre o gamescope
 

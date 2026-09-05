@@ -263,10 +263,20 @@ def merge_launch_options(existing):
     return (new_prefix + " %command%" + suffix).strip()
 
 
+# env vars de Proton/Wine reconhecidas como toggles estruturados na GUI
+PROTON_FLAG_VARS = {
+    "PROTON_NO_ESYNC": "no_esync",
+    "PROTON_NO_FSYNC": "no_fsync",
+    "PROTON_ENABLE_NVAPI": "enable_nvapi",
+}
+
+
 def parse_launch_options(s):
     """String de LaunchOptions -> dict estruturado {gamemode, mangohud,
-    gamescope, extra, suffix}. gamescope e None ou dict com width/height/
-    refresh/fullscreen/borderless/extra."""
+    gamescope, proton, extra, suffix}. gamescope e None ou dict com
+    width/height/render_width/render_height/refresh/filter/fullscreen/
+    borderless/steam/adaptive_sync/framerate_limit/extra. proton e dict
+    com no_esync/no_fsync/enable_nvapi/vkd3d_config."""
     s = s or ""
     if "%command%" in s:
         prefix, suffix = s.split("%command%", 1)
@@ -280,7 +290,30 @@ def parse_launch_options(s):
     else:
         outer, inner = tokens, []
 
-    result = {"gamemode": False, "mangohud": False, "gamescope": None, "extra": ""}
+    result = {
+        "gamemode": False,
+        "mangohud": False,
+        "gamescope": None,
+        "proton": {
+            "no_esync": False,
+            "no_fsync": False,
+            "enable_nvapi": False,
+            "vkd3d_config": "",
+        },
+        "extra": "",
+    }
+
+    # env vars ficam sempre antes de qualquer wrapper, procuradas em outer
+    remaining = []
+    for tok in outer:
+        var, _, val = tok.partition("=")
+        if var in PROTON_FLAG_VARS and val == "1":
+            result["proton"][PROTON_FLAG_VARS[var]] = True
+        elif var == "VKD3D_CONFIG":
+            result["proton"]["vkd3d_config"] = val
+        else:
+            remaining.append(tok)
+    outer = remaining
 
     if "gamemoderun" in outer:
         result["gamemode"] = True
@@ -294,9 +327,15 @@ def parse_launch_options(s):
             "enabled": True,
             "width": "",
             "height": "",
+            "render_width": "",
+            "render_height": "",
             "refresh": "",
+            "filter": "",
             "fullscreen": False,
             "borderless": False,
+            "steam": False,
+            "adaptive_sync": False,
+            "framerate_limit": "",
             "extra": "",
         }
         i = 0
@@ -309,8 +348,17 @@ def parse_launch_options(s):
             elif a == "-H" and i + 1 < len(gargs):
                 gs["height"] = gargs[i + 1]
                 i += 2
+            elif a == "-w" and i + 1 < len(gargs):
+                gs["render_width"] = gargs[i + 1]
+                i += 2
+            elif a == "-h" and i + 1 < len(gargs):
+                gs["render_height"] = gargs[i + 1]
+                i += 2
             elif a == "-r" and i + 1 < len(gargs):
                 gs["refresh"] = gargs[i + 1]
+                i += 2
+            elif a == "-F" and i + 1 < len(gargs):
+                gs["filter"] = gargs[i + 1]
                 i += 2
             elif a == "-f":
                 gs["fullscreen"] = True
@@ -318,6 +366,15 @@ def parse_launch_options(s):
             elif a == "-b":
                 gs["borderless"] = True
                 i += 1
+            elif a == "-e":
+                gs["steam"] = True
+                i += 1
+            elif a == "--adaptive-sync":
+                gs["adaptive_sync"] = True
+                i += 1
+            elif a == "--framerate-limit" and i + 1 < len(gargs):
+                gs["framerate_limit"] = gargs[i + 1]
+                i += 2
             else:
                 leftover.append(a)
                 i += 1
@@ -338,27 +395,52 @@ def parse_launch_options(s):
     return result, suffix.strip()
 
 
-def build_launch_options(gamemode, mangohud, gamescope, extra, suffix=""):
+def build_launch_options(gamemode, mangohud, gamescope, extra, suffix="", proton=None):
     """Inverso de parse_launch_options: monta a string de LaunchOptions.
-    gamescope: None, ou dict com enabled/width/height/refresh/fullscreen/
-    borderless/extra."""
+    gamescope: None, ou dict com enabled/width/height/render_width/
+    render_height/refresh/filter/fullscreen/borderless/steam/
+    adaptive_sync/framerate_limit/extra. proton: None, ou dict com
+    no_esync/no_fsync/enable_nvapi/vkd3d_config."""
     tokens = []
+
+    if proton:
+        if proton.get("no_esync"):
+            tokens.append("PROTON_NO_ESYNC=1")
+        if proton.get("no_fsync"):
+            tokens.append("PROTON_NO_FSYNC=1")
+        if proton.get("enable_nvapi"):
+            tokens.append("PROTON_ENABLE_NVAPI=1")
+        if proton.get("vkd3d_config"):
+            tokens.append(f"VKD3D_CONFIG={proton['vkd3d_config']}")
+
     if gamemode:
         tokens.append("gamemoderun")
 
     use_gamescope = bool(gamescope and gamescope.get("enabled"))
     if use_gamescope:
         tokens.append("gamescope")
+        if gamescope.get("render_width"):
+            tokens += ["-w", str(gamescope["render_width"])]
+        if gamescope.get("render_height"):
+            tokens += ["-h", str(gamescope["render_height"])]
         if gamescope.get("width"):
             tokens += ["-W", str(gamescope["width"])]
         if gamescope.get("height"):
             tokens += ["-H", str(gamescope["height"])]
         if gamescope.get("refresh"):
             tokens += ["-r", str(gamescope["refresh"])]
+        if gamescope.get("filter"):
+            tokens += ["-F", str(gamescope["filter"])]
         if gamescope.get("fullscreen"):
             tokens.append("-f")
         if gamescope.get("borderless"):
             tokens.append("-b")
+        if gamescope.get("steam"):
+            tokens.append("-e")
+        if gamescope.get("adaptive_sync"):
+            tokens.append("--adaptive-sync")
+        if gamescope.get("framerate_limit"):
+            tokens += ["--framerate-limit", str(gamescope["framerate_limit"])]
         if gamescope.get("extra"):
             tokens += gamescope["extra"].split()
         tokens.append("--")
