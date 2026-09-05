@@ -1,0 +1,104 @@
+name: Build packages
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0.dev${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+  tarball:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Fixa a versao
+        run: sed -i "s/^version = .*/version = \"${{ needs.version.outputs.version }}\"/" pyproject.toml
+      - run: pip install build
+      - run: python3 -m build --sdist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gbsteamparams-tar-gz
+          path: dist/*.tar.gz
+
+  rpm:
+    needs: version
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instala ferramentas de build
+        run: dnf install -y rpm-build python3-devel pyproject-rpm-macros python3-pip git
+      - name: Fixa a versao
+        run: sed -i "s/^version = .*/version = \"${{ needs.version.outputs.version }}\"/" pyproject.toml
+      - run: python3 -m pip install build
+      - run: python3 -m build --sdist --outdir dist
+      - name: rpmbuild
+        run: |
+          mkdir -p rpmbuild/{SOURCES,SPECS,RPMS,BUILD,SRPMS}
+          cp dist/*.tar.gz rpmbuild/SOURCES/
+          cp packaging/rpm/gbsteamparams.spec rpmbuild/SPECS/
+          rpmbuild --define "_topdir $PWD/rpmbuild" \
+                    --define "_version ${{ needs.version.outputs.version }}" \
+                    -bb rpmbuild/SPECS/gbsteamparams.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gbsteamparams-rpm
+          path: rpmbuild/RPMS/**/*.rpm
+
+  deb:
+    needs: version
+    runs-on: ubuntu-latest
+    container: debian:bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instala ferramentas de build
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential debhelper dh-python \
+            python3-all python3-setuptools python3-build python3-installer python3-wheel \
+            git ca-certificates
+      - name: Fixa a versao
+        run: |
+          sed -i "s/^version = .*/version = \"${{ needs.version.outputs.version }}\"/" pyproject.toml
+          sed -i "s/@VERSION@/${{ needs.version.outputs.version }}/" debian/changelog
+      - name: dpkg-buildpackage
+        run: dpkg-buildpackage -us -uc -b
+      - name: Move artefatos
+        run: |
+          mkdir -p out
+          mv ../*.deb out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gbsteamparams-deb
+          path: out/*.deb
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [tarball, rpm, deb]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Cria a Release com os pacotes
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*

@@ -1,0 +1,17 @@
+[project]
+name = "gbsteamparams"
+version = "0.1.0"
+description = "Aplica gamemode, mangohud e gamescope nas Launch Options de todos os jogos da Steam"
+requires-python = ">=3.10"
+dependencies = ["PySide6"]
+
+[project.scripts]
+steam-boost = "gbsteamparams.cli:main"
+steam-boost-gui = "gbsteamparams.gui:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["gbsteamparams*"]

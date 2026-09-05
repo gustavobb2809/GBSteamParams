@@ -1,0 +1,5 @@
+gbsteamparams (@VERSION@-1) unstable; urgency=medium
+
+  * Build automatizado via CI.
+
+ -- Gustavo <gustavob2809@gmail.com>  Sat, 05 Sep 2026 00:00:00 +0000

@@ -1,0 +1,28 @@
+Source: gbsteamparams
+Section: games
+Priority: optional
+Maintainer: Gustavo <gustavob2809@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               dh-python,
+               python3-all,
+               python3-setuptools,
+               python3-build,
+               python3-installer,
+               python3-wheel
+Standards-Version: 4.6.2
+Homepage: https://github.com/gustavob2809/GBSteamParams
+Rules-Requires-Root: no
+
+Package: gbsteamparams
+Architecture: all
+Depends: ${python3:Depends},
+         ${misc:Depends},
+         python3-pyside6.qtwidgets,
+         python3-pyside6.qtcore,
+         python3-pyside6.qtgui,
+         gamemode,
+         mangohud
+Description: Configura gamemode, MangoHud e gamescope nas Launch Options da Steam
+ Ferramenta CLI (steam-boost) e app de mesa (steam-boost-gui) para aplicar
+ gamemode, MangoHud e gamescope automaticamente em todos os jogos da Steam,
+ editando o localconfig.vdf do perfil local.
