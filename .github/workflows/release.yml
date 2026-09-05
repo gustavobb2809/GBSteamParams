@@ -44,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Instala ferramentas de build
-        run: dnf install -y rpm-build python3-devel pyproject-rpm-macros python3-pip git
+        run: dnf install -y rpm-build python3-devel pyproject-rpm-macros python3-pip python3-setuptools python3-wheel python3-packaging python3-pyside6 git
       - name: Fixa a versao
         run: sed -i "s/^version = .*/version = \"${{ needs.version.outputs.version }}\"/" pyproject.toml
       - run: python3 -m pip install build

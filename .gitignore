@@ -5,3 +5,14 @@ gbsteamparams.egg-info/
 build/
 dist/
 .venv/
+
+# artefatos de dpkg-buildpackage/pybuild
+.pybuild/
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/*.substvars
+debian/gbsteamparams/
+
+# artefatos de rpmbuild
+rpmbuild/
