@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 220" width="200" height="220">
+  <!-- pes -->
+  <ellipse cx="78" cy="204" rx="20" ry="11" fill="#f5a300"/>
+  <ellipse cx="122" cy="204" rx="20" ry="11" fill="#f5a300"/>
+
+  <!-- corpo -->
+  <path d="M60,92
+           C38,112 33,162 45,196
+           C55,214 145,214 155,196
+           C167,162 162,112 140,92
+           C128,78 72,78 60,92 Z" fill="#1a1a1a"/>
+
+  <!-- barriga -->
+  <path d="M76,112
+           C64,132 61,168 70,192
+           C78,206 122,206 130,192
+           C139,168 136,132 124,112
+           C114,102 86,102 76,112 Z" fill="#ffffff"/>
+
+  <!-- cabeca -->
+  <circle cx="100" cy="55" r="36" fill="#1a1a1a"/>
+
+  <!-- olhos -->
+  <ellipse cx="85" cy="52" rx="11" ry="14" fill="#ffffff"/>
+  <ellipse cx="115" cy="52" rx="11" ry="14" fill="#ffffff"/>
+  <circle cx="87" cy="56" r="4.5" fill="#111111"/>
+  <circle cx="113" cy="56" r="4.5" fill="#111111"/>
+
+  <!-- bico -->
+  <polygon points="90,66 110,66 100,80" fill="#f5a300"/>
+
+  <!-- nadadeira esquerda -->
+  <path d="M56,100 C32,120 34,160 80,160 C70,138 62,118 56,100 Z" fill="#1a1a1a"/>
+  <!-- nadadeira direita -->
+  <path d="M144,100 C168,120 166,160 120,160 C130,138 138,118 144,100 Z" fill="#1a1a1a"/>
+
+  <!-- controle -->
+  <rect x="62" y="122" width="76" height="30" rx="15" ry="15" fill="#33363a"/>
+  <!-- d-pad -->
+  <rect x="72" y="133" width="14" height="5" rx="1.5" fill="#d8dadc"/>
+  <rect x="76.5" y="128.5" width="5" height="14" rx="1.5" fill="#d8dadc"/>
+  <!-- botoes -->
+  <circle cx="120" cy="132" r="4" fill="#e74c3c"/>
+  <circle cx="128" cy="138" r="4" fill="#3498db"/>
+  <circle cx="112" cy="138" r="4" fill="#f1c40f"/>
+  <circle cx="120" cy="144" r="4" fill="#2ecc71"/>
+</svg>

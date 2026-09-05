@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=GBSteamParams
+Comment=Configura gamemode, MangoHud e gamescope nos jogos da Steam
+Exec=steam-boost-gui
+Icon=gbsteamparams
+Categories=Game;Utility;
+Terminal=false

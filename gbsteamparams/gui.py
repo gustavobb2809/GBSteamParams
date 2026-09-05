@@ -5,8 +5,10 @@ gamemode, mangohud e gamescope nas Launch Options de cada jogo da Steam.
 """
 import subprocess
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -27,6 +29,8 @@ from PySide6.QtWidgets import (
 )
 
 from gbsteamparams import core
+
+ICON_PATH = Path(__file__).parent / "resources" / "icon.svg"
 
 
 def summary_for(value_pairs, appid, excluded):
@@ -228,6 +232,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("GBSteamParams — gamemode / mangohud / gamescope")
+        self.setWindowIcon(QIcon(str(ICON_PATH)))
         self.resize(1000, 600)
 
         self.root = core.steam_root()
@@ -392,6 +397,7 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(str(ICON_PATH)))
     win = MainWindow()
     win.show()
     sys.exit(app.exec())
