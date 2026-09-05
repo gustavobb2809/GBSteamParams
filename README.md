@@ -1,9 +1,11 @@
 # GBSteamParams
 
-Ferramenta (CLI + app de mesa) para aplicar automaticamente **gamemode**,
-**MangoHud** e, opcionalmente, **gamescope** nas Launch Options de todos os
-jogos da sua biblioteca Steam — sem precisar abrir as propriedades de cada
-jogo uma por uma.
+Ferramenta (CLI + app de mesa) para configurar as Launch Options dos jogos
+da sua biblioteca Steam sem precisar abrir as propriedades de cada jogo uma
+por uma: o CLI aplica **gamemode** + **MangoHud** em massa, e o app gráfico
+permite ajustar cada jogo individualmente, incluindo **gamescope**
+(resolução interna/saída, upscaling, VRR, limite de FPS) e opções
+avançadas de **Proton/Wine** (ESync/FSync, NVAPI/DLSS, VKD3D_CONFIG).
 
 Feito para Linux (testado em Fedora + KDE Plasma), com Steam nativa ou
 Flatpak/Snap com pequenas adaptações de caminho.
