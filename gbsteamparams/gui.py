@@ -11,8 +11,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QCheckBox,
-    QComboBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -29,9 +29,58 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gbsteamparams import core
+from gbsteamparams import core, theme
 
 ICON_PATH = Path(__file__).parent / "resources" / "icon.svg"
+
+GAMESCOPE_FILTERS = [
+    ("Padrao", ""),
+    ("Linear", "linear"),
+    ("Nearest", "nearest"),
+    ("FSR", "fsr"),
+    ("NIS", "nis"),
+    ("Pixel", "pixel"),
+]
+
+GAMESCOPE_SCALERS = [
+    ("Padrao", ""),
+    ("Integer", "integer"),
+    ("Fit", "fit"),
+    ("Fill", "fill"),
+    ("Esticar (4:3)", "stretch"),
+]
+
+
+def _make_segmented(group_parent, options):
+    """Cria um QButtonGroup exclusivo com um QPushButton checavel por
+    opcao (estilo 'pills'), devolvendo (QButtonGroup, QHBoxLayout)."""
+    button_group = QButtonGroup(group_parent)
+    button_group.setExclusive(True)
+    row = QHBoxLayout()
+    row.setSpacing(6)
+    for label, value in options:
+        btn = QPushButton(label)
+        btn.setCheckable(True)
+        btn.setProperty("role", "segment")
+        btn.setProperty("value", value)
+        button_group.addButton(btn)
+        row.addWidget(btn)
+    row.addStretch(1)
+    button_group.buttons()[0].setChecked(True)
+    return button_group, row
+
+
+def _segmented_value(button_group):
+    for btn in button_group.buttons():
+        if btn.isChecked():
+            return btn.property("value")
+    return ""
+
+
+def _set_segmented_value(button_group, value):
+    value = value or ""
+    for btn in button_group.buttons():
+        btn.setChecked(btn.property("value") == value)
 
 
 def summary_for(value_pairs, appid, excluded):
@@ -62,10 +111,11 @@ class DetailPanel(QWidget):
         layout = QVBoxLayout(self)
 
         self.title = QLabel("Selecione um jogo na lista")
-        self.title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        self.title.setObjectName("detailTitle")
         layout.addWidget(self.title)
 
         self.managed_check = QCheckBox("Gerenciado manualmente (steam-boost nao mexe)")
+        self.managed_check.setProperty("accent", "neutral")
         self.managed_check.toggled.connect(self._on_managed_toggled)
         layout.addWidget(self.managed_check)
 
@@ -91,20 +141,22 @@ class DetailPanel(QWidget):
         self.gs_height.setPlaceholderText("ex: 1440")
         self.gs_refresh = QLineEdit()
         self.gs_refresh.setPlaceholderText("ex: 165 (opcional)")
-        self.gs_filter = QComboBox()
-        self.gs_filter.addItem("(padrao)", "")
-        for label, value in [
-            ("Linear", "linear"),
-            ("Nearest", "nearest"),
-            ("FSR", "fsr"),
-            ("NIS", "nis"),
-            ("Pixel", "pixel"),
-        ]:
-            self.gs_filter.addItem(label, value)
+
+        self.gs_filter_group, filter_row = _make_segmented(self, GAMESCOPE_FILTERS)
+        self.gs_scaler_group, scaler_row = _make_segmented(self, GAMESCOPE_SCALERS)
+
         self.gs_fullscreen = QCheckBox("Tela cheia (-f)")
+        self.gs_fullscreen.setProperty("accent", "teal")
         self.gs_borderless = QCheckBox("Sem bordas (-b)")
+        self.gs_borderless.setProperty("accent", "teal")
+        self.gs_grab = QCheckBox("Capturar teclado (-g)")
+        self.gs_grab.setProperty("accent", "teal")
+        self.gs_force_grab_cursor = QCheckBox("Prender o cursor / mouse relativo (--force-grab-cursor)")
+        self.gs_force_grab_cursor.setProperty("accent", "teal")
         self.gs_steam = QCheckBox("Integracao com overlay da Steam (-e)")
+        self.gs_steam.setProperty("accent", "teal")
         self.gs_adaptive_sync = QCheckBox("Adaptive Sync / VRR (--adaptive-sync)")
+        self.gs_adaptive_sync.setProperty("accent", "teal")
         self.gs_framerate_limit = QLineEdit()
         self.gs_framerate_limit.setPlaceholderText("ex: 60 (opcional)")
         self.gs_extra = QLineEdit()
@@ -114,20 +166,28 @@ class DetailPanel(QWidget):
         gs_form.addRow("Largura", self.gs_width)
         gs_form.addRow("Altura", self.gs_height)
         gs_form.addRow("Taxa de atualizacao", self.gs_refresh)
-        gs_form.addRow("Filtro de upscaling", self.gs_filter)
+        gs_form.addRow("Filtro de upscaling", filter_row)
+        gs_form.addRow("Modo de escala (-S)", scaler_row)
         gs_form.addRow(self.gs_fullscreen)
         gs_form.addRow(self.gs_borderless)
+        gs_form.addRow(self.gs_grab)
+        gs_form.addRow(self.gs_force_grab_cursor)
         gs_form.addRow(self.gs_steam)
         gs_form.addRow(self.gs_adaptive_sync)
         gs_form.addRow("Limite de FPS", self.gs_framerate_limit)
         gs_form.addRow("Extra", self.gs_extra)
         controls_layout.addWidget(self.gamescope_box)
 
-        self.proton_box = QGroupBox("Proton / Wine (avancado)")
+        self.proton_box = QGroupBox()
+        self._proton_box_base_title = "Proton / Wine (avancado)"
+        self.proton_box.setTitle(self._proton_box_base_title)
         proton_form = QFormLayout(self.proton_box)
         self.proton_no_esync = QCheckBox("Desativar ESync (PROTON_NO_ESYNC)")
+        self.proton_no_esync.setProperty("accent", "teal")
         self.proton_no_fsync = QCheckBox("Desativar FSync (PROTON_NO_FSYNC)")
+        self.proton_no_fsync.setProperty("accent", "teal")
         self.proton_nvapi = QCheckBox("Habilitar NVAPI / DLSS (PROTON_ENABLE_NVAPI)")
+        self.proton_nvapi.setProperty("accent", "teal")
         self.proton_vkd3d = QLineEdit()
         self.proton_vkd3d.setPlaceholderText("ex: dxr,dxr11 (ray tracing DX12, opcional)")
         proton_form.addRow(self.proton_no_esync)
@@ -144,14 +204,18 @@ class DetailPanel(QWidget):
 
         layout.addWidget(self.controls)
 
-        preview_form = QFormLayout()
-        self.preview = QLineEdit()
-        self.preview.setReadOnly(True)
-        preview_form.addRow("Launch Options resultante", self.preview)
-        layout.addLayout(preview_form)
+        layout.addWidget(QLabel("Launch Options resultante"))
+        self.preview = QLabel()
+        self.preview.setObjectName("cmdPreview")
+        self.preview.setTextFormat(Qt.RichText)
+        self.preview.setWordWrap(True)
+        self.preview.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self._preview_text = ""
+        layout.addWidget(self.preview)
 
         btn_row = QHBoxLayout()
         self.apply_btn = QPushButton("Aplicar a este jogo")
+        self.apply_btn.setProperty("role", "primary")
         self.apply_btn.clicked.connect(self._apply)
         self.revert_btn = QPushButton("Reverter")
         self.revert_btn.clicked.connect(self._revert)
@@ -172,6 +236,8 @@ class DetailPanel(QWidget):
             self.gs_refresh,
             self.gs_fullscreen,
             self.gs_borderless,
+            self.gs_grab,
+            self.gs_force_grab_cursor,
             self.gs_steam,
             self.gs_adaptive_sync,
             self.gs_framerate_limit,
@@ -184,9 +250,52 @@ class DetailPanel(QWidget):
         ):
             sig = getattr(w, "toggled", None) or getattr(w, "textChanged", None)
             sig.connect(self._refresh_preview)
-        self.gs_filter.currentIndexChanged.connect(self._refresh_preview)
+        self.gs_filter_group.buttonToggled.connect(self._refresh_preview)
+        self.gs_scaler_group.buttonToggled.connect(self._refresh_preview)
+
+        # Preencher qualquer campo do gamescope (ou ligar um dos toggles dele)
+        # liga sozinho o switch mestre do card — sem isso, os valores digitados
+        # ficam guardados na tela mas nunca entram nas Launch Options, porque o
+        # gamescope inteiro so e montado quando esse switch esta marcado.
+        for field in (
+            self.gs_render_width,
+            self.gs_render_height,
+            self.gs_width,
+            self.gs_height,
+            self.gs_refresh,
+            self.gs_framerate_limit,
+            self.gs_extra,
+        ):
+            field.textChanged.connect(self._auto_enable_gamescope_on_text)
+        for check in (
+            self.gs_fullscreen,
+            self.gs_borderless,
+            self.gs_grab,
+            self.gs_force_grab_cursor,
+            self.gs_steam,
+            self.gs_adaptive_sync,
+        ):
+            check.toggled.connect(self._auto_enable_gamescope_on_bool)
+        self.gs_filter_group.buttonToggled.connect(self._auto_enable_gamescope_on_filter)
+        self.gs_scaler_group.buttonToggled.connect(self._auto_enable_gamescope_on_filter)
 
         self.set_game(None)
+
+    def _auto_enable_gamescope(self):
+        if not self.gamescope_box.isChecked():
+            self.gamescope_box.setChecked(True)
+
+    def _auto_enable_gamescope_on_text(self, text):
+        if text.strip():
+            self._auto_enable_gamescope()
+
+    def _auto_enable_gamescope_on_bool(self, checked):
+        if checked:
+            self._auto_enable_gamescope()
+
+    def _auto_enable_gamescope_on_filter(self, button, checked):
+        if checked and button.property("value"):
+            self._auto_enable_gamescope()
 
     def _on_managed_toggled(self, checked):
         self.controls.setEnabled(not checked)
@@ -206,6 +315,7 @@ class DetailPanel(QWidget):
 
         if not has_game:
             self.title.setText("Selecione um jogo na lista")
+            self._preview_text = ""
             self.preview.setText("")
             return
 
@@ -231,9 +341,12 @@ class DetailPanel(QWidget):
         self.gs_width.setText(gs["width"] if gs else "")
         self.gs_height.setText(gs["height"] if gs else "")
         self.gs_refresh.setText(gs["refresh"] if gs else "")
-        self.gs_filter.setCurrentIndex(self.gs_filter.findData(gs["filter"] if gs else ""))
+        _set_segmented_value(self.gs_filter_group, gs["filter"] if gs else "")
+        _set_segmented_value(self.gs_scaler_group, gs["scaler"] if gs else "")
         self.gs_fullscreen.setChecked(bool(gs and gs["fullscreen"]))
         self.gs_borderless.setChecked(bool(gs and gs["borderless"]))
+        self.gs_grab.setChecked(bool(gs and gs["grab"]))
+        self.gs_force_grab_cursor.setChecked(bool(gs and gs["force_grab_cursor"]))
         self.gs_steam.setChecked(bool(gs and gs["steam"]))
         self.gs_adaptive_sync.setChecked(bool(gs and gs["adaptive_sync"]))
         self.gs_framerate_limit.setText(gs["framerate_limit"] if gs else "")
@@ -260,9 +373,12 @@ class DetailPanel(QWidget):
             "width": self.gs_width.text().strip(),
             "height": self.gs_height.text().strip(),
             "refresh": self.gs_refresh.text().strip(),
-            "filter": self.gs_filter.currentData(),
+            "filter": _segmented_value(self.gs_filter_group),
+            "scaler": _segmented_value(self.gs_scaler_group),
             "fullscreen": self.gs_fullscreen.isChecked(),
             "borderless": self.gs_borderless.isChecked(),
+            "grab": self.gs_grab.isChecked(),
+            "force_grab_cursor": self.gs_force_grab_cursor.isChecked(),
             "steam": self.gs_steam.isChecked(),
             "adaptive_sync": self.gs_adaptive_sync.isChecked(),
             "framerate_limit": self.gs_framerate_limit.text().strip(),
@@ -280,19 +396,27 @@ class DetailPanel(QWidget):
     def _refresh_preview(self, *_):
         if not self.game:
             return
+        proton = self._current_proton_dict()
         new = core.build_launch_options(
             self.gamemode_check.isChecked(),
             self.mangohud_check.isChecked(),
             self._current_gamescope_dict(),
             self.extra_edit.text().strip(),
-            proton=self._current_proton_dict(),
+            proton=proton,
         )
-        self.preview.setText(new)
+        self._preview_text = new
+        self.preview.setText(theme.colorize_command(new))
+
+        active = sum([proton["no_esync"], proton["no_fsync"], proton["enable_nvapi"], bool(proton["vkd3d_config"])])
+        title = self._proton_box_base_title
+        if active:
+            title += f" — {active} ativa{'s' if active != 1 else ''}"
+        self.proton_box.setTitle(title)
 
     def _apply(self):
         if not self.game:
             return
-        new = self.preview.text()
+        new = self._preview_text
         core.set_value(self.game["value"], "LaunchOptions", new)
         self.game["dirty"] = True
         self.on_apply(self.game)
@@ -355,6 +479,7 @@ class MainWindow(QMainWindow):
         self.bulk_btn = QPushButton("Aplicar gamemode+mangohud a todos (nao gerenciados)")
         self.bulk_btn.clicked.connect(self._apply_bulk_default)
         self.save_btn = QPushButton("Salvar alteracoes")
+        self.save_btn.setProperty("role", "primary")
         self.save_btn.clicked.connect(self._save)
         bottom.addWidget(self.reload_btn)
         bottom.addWidget(self.bulk_btn)
@@ -483,6 +608,7 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(str(ICON_PATH)))
+    app.setStyleSheet(theme.STYLESHEET)
     win = MainWindow()
     win.show()
     sys.exit(app.exec())

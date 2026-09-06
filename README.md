@@ -74,8 +74,12 @@ steam-boost-gui
   - **gamemode** e **MangoHud** (liga/desliga simples).
   - **gamescope**: resolução interna de render (`-w`/`-h`, upscaling) e de
     saída (`-W`/`-H`), taxa de atualização, filtro de upscaling (linear,
-    nearest, FSR, NIS, pixel), tela cheia, sem bordas, integração com
-    overlay da Steam (`-e`), Adaptive Sync/VRR e limite de FPS.
+    nearest, FSR, NIS, pixel), modo de escala (`-S`: integer/fit/fill/
+    **stretch** — esse é o que dá a resolução "esticada" tipo 4:3 que da
+    pra fazer no Windows), tela cheia, sem bordas, capturar teclado
+    (`-g`) e prender o cursor/mouse relativo (`--force-grab-cursor` —
+    sem isso a mira pode não se mexer em modo nested/janela), integração
+    com overlay da Steam (`-e`), Adaptive Sync/VRR e limite de FPS.
   - **Proton / Wine** (avançado): desativar ESync/FSync, habilitar
     NVAPI/DLSS e `VKD3D_CONFIG` (ray tracing DX12).
   - Opções extras livres (outras flags/env vars).

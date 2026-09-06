@@ -187,9 +187,38 @@ def apps_section(root_pairs):
     return find(steam, "apps") if steam else None
 
 
-def is_steam_running():
+def _pid_alive(pid):
     try:
-        out = subprocess.run(["pgrep", "-f", "steam"], capture_output=True, text=True)
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def is_steam_running():
+    # A propria Steam mantem esse arquivo com o PID do processo principal
+    # enquanto esta rodando (mesmo truque usado por Lutris, ProtonUp etc.).
+    # Nao usar "pgrep -f steam": isso faz busca por substring na linha de
+    # comando inteira e da falso positivo com o proprio steam-boost-gui.
+    root = steam_root()
+    candidates = [os.path.expanduser("~/.steam/steam.pid")]
+    if root:
+        candidates.append(os.path.join(root, "steam.pid"))
+    for pid_file in candidates:
+        if not os.path.isfile(pid_file):
+            continue
+        try:
+            pid = int(open(pid_file, encoding="utf-8").read().strip())
+        except (ValueError, OSError):
+            continue
+        if _pid_alive(pid):
+            return True
+    try:
+        out = subprocess.run(["pgrep", "-x", "steam"], capture_output=True, text=True)
         return out.returncode == 0
     except FileNotFoundError:
         return False
@@ -274,8 +303,9 @@ PROTON_FLAG_VARS = {
 def parse_launch_options(s):
     """String de LaunchOptions -> dict estruturado {gamemode, mangohud,
     gamescope, proton, extra, suffix}. gamescope e None ou dict com
-    width/height/render_width/render_height/refresh/filter/fullscreen/
-    borderless/steam/adaptive_sync/framerate_limit/extra. proton e dict
+    width/height/render_width/render_height/refresh/filter/scaler/
+    fullscreen/borderless/grab/force_grab_cursor/steam/adaptive_sync/
+    framerate_limit/extra. proton e dict
     com no_esync/no_fsync/enable_nvapi/vkd3d_config."""
     s = s or ""
     if "%command%" in s:
@@ -331,8 +361,11 @@ def parse_launch_options(s):
             "render_height": "",
             "refresh": "",
             "filter": "",
+            "scaler": "",
             "fullscreen": False,
             "borderless": False,
+            "grab": False,
+            "force_grab_cursor": False,
             "steam": False,
             "adaptive_sync": False,
             "framerate_limit": "",
@@ -360,11 +393,20 @@ def parse_launch_options(s):
             elif a == "-F" and i + 1 < len(gargs):
                 gs["filter"] = gargs[i + 1]
                 i += 2
+            elif a == "-S" and i + 1 < len(gargs):
+                gs["scaler"] = gargs[i + 1]
+                i += 2
             elif a == "-f":
                 gs["fullscreen"] = True
                 i += 1
             elif a == "-b":
                 gs["borderless"] = True
+                i += 1
+            elif a == "-g":
+                gs["grab"] = True
+                i += 1
+            elif a == "--force-grab-cursor":
+                gs["force_grab_cursor"] = True
                 i += 1
             elif a == "-e":
                 gs["steam"] = True
@@ -398,8 +440,9 @@ def parse_launch_options(s):
 def build_launch_options(gamemode, mangohud, gamescope, extra, suffix="", proton=None):
     """Inverso de parse_launch_options: monta a string de LaunchOptions.
     gamescope: None, ou dict com enabled/width/height/render_width/
-    render_height/refresh/filter/fullscreen/borderless/steam/
-    adaptive_sync/framerate_limit/extra. proton: None, ou dict com
+    render_height/refresh/filter/scaler/fullscreen/borderless/grab/
+    force_grab_cursor/steam/adaptive_sync/framerate_limit/extra.
+    proton: None, ou dict com
     no_esync/no_fsync/enable_nvapi/vkd3d_config."""
     tokens = []
 
@@ -431,10 +474,16 @@ def build_launch_options(gamemode, mangohud, gamescope, extra, suffix="", proton
             tokens += ["-r", str(gamescope["refresh"])]
         if gamescope.get("filter"):
             tokens += ["-F", str(gamescope["filter"])]
+        if gamescope.get("scaler"):
+            tokens += ["-S", str(gamescope["scaler"])]
         if gamescope.get("fullscreen"):
             tokens.append("-f")
         if gamescope.get("borderless"):
             tokens.append("-b")
+        if gamescope.get("grab"):
+            tokens.append("-g")
+        if gamescope.get("force_grab_cursor"):
+            tokens.append("--force-grab-cursor")
         if gamescope.get("steam"):
             tokens.append("-e")
         if gamescope.get("adaptive_sync"):
