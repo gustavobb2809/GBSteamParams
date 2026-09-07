@@ -21,7 +21,8 @@ Depends: ${python3:Depends},
          python3-pyside6.qtcore,
          python3-pyside6.qtgui,
          gamemode,
-         mangohud
+         mangohud,
+         gamescope
 Description: Configura gamemode, MangoHud e gamescope nas Launch Options da Steam
  Ferramenta CLI (steam-boost) e app de mesa (steam-boost-gui) para aplicar
  gamemode, MangoHud e gamescope automaticamente em todos os jogos da Steam,

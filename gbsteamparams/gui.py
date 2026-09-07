@@ -7,24 +7,23 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QByteArray, QSize, Qt
+from PySide6.QtGui import QIcon, QPainter, QPixmap
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QCheckBox,
     QFormLayout,
-    QGroupBox,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
     QSplitter,
-    QTableWidget,
-    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -49,6 +48,65 @@ GAMESCOPE_SCALERS = [
     ("Fill", "fill"),
     ("Esticar (4:3)", "stretch"),
 ]
+
+LSFG_MULTIPLIERS = [
+    ("Padrao", ""),
+    ("2x", "2"),
+    ("3x", "3"),
+    ("4x", "4"),
+]
+
+# Icones inline (stroke-based, grid 24x24) usados nos cabecalhos de card e
+# nas linhas de toggle. Cores sao aplicadas na hora de renderizar (ver
+# _svg_pixmap), entao um mesmo icone serve pra qualquer widget.
+ICONS = {
+    "gamemode": (
+        '<path d="M7 8c-2.2 0-4 1.8-4 4.5S4.6 18 6.5 18c1.2 0 1.6-.6 2.3-1.5'
+        'l1-1.3c.5-.6 1-.9 1.8-.9h1.6c.8 0 1.3.3 1.8.9l1 1.3c.7.9 1.1 1.5 2.3'
+        ' 1.5 1.9 0 3.5-1.2 3.5-5.5S19.2 8 17 8H7Z"/><path d="M7.5 12.5h3M9'
+        ' 11v3"/>'
+    ),
+    "mangohud": '<path d="M4 13h2.5l2-6.5 3 13 2.2-9.5 1.8 3h4.5"/>',
+    "gamescope": '<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 20h8M12 17v3"/>',
+    "proton": '<path d="M8 3h8l-1 6.2a3 3 0 0 1-2.2 2.7v3.1h2.4"/><path d="M12 12v7M9 21h6"/>',
+    "lsfg": (
+        '<rect x="3" y="8" width="13" height="13" rx="2.5"/>'
+        '<path d="M8 8V5.5A2.5 2.5 0 0 1 10.5 3H18a3 3 0 0 1 3 3v10.5a2.5 2.5'
+        ' 0 0 1-2.5 2.5H16"/>'
+    ),
+    "lock": '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+    "disable": '<circle cx="12" cy="12" r="8"/><path d="M7 7l10 10"/>',
+    "fullscreen": '<path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/>',
+    "borderless": '<rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/>',
+    "keyboard": '<rect x="4" y="5" width="16" height="10" rx="2"/><path d="M8 19h8M9 15v4M15 15v4"/>',
+    "cursor": '<rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 7v4"/>',
+    "steam": '<path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="M3 13l9 5 9-5"/>',
+    "sync": '<path d="M4 12a8 8 0 0 1 14-5M20 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5M4 20v-5h5"/>',
+    "bolt": '<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/>',
+    "arrow": '<path d="M5 12h14M13 6l6 6-6 6"/>',
+}
+
+
+def _svg_pixmap(svg_body, color, size=18):
+    """Renderiza um icone inline (viewBox 0 0 24 24, so stroke) num
+    QPixmap monocromatico da cor pedida."""
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+        f'fill="none" stroke="{color}" stroke-width="1.75" '
+        f'stroke-linecap="round" stroke-linejoin="round">{svg_body}</svg>'
+    )
+    renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    renderer.render(painter)
+    painter.end()
+    return pixmap
+
+
+def _set_icon(widget, name, color=None):
+    widget.setIcon(QIcon(_svg_pixmap(ICONS[name], color or theme.TEXT_MUTED)))
+    widget.setIconSize(QSize(18, 18))
 
 
 def _make_segmented(group_parent, options):
@@ -83,23 +141,121 @@ def _set_segmented_value(button_group, value):
         btn.setChecked(btn.property("value") == value)
 
 
-def summary_for(value_pairs, appid, excluded):
+class Card(QWidget):
+    """Card com cabecalho (icone + titulo + tag estatica opcional + badge
+    dinamico + switch mestre opcional) e corpo em QFormLayout.
+
+    Quando checkable=True, `switch` e um QCheckBox comum — mesma API que
+    o resto do codigo ja espera (isChecked/setChecked/toggled) — e o
+    corpo do card fica automaticamente habilitado/desabilitado junto com
+    ele, do jeito que um QGroupBox checavel nativo ja fazia sozinho."""
+
+    def __init__(self, icon, title, tag=None, checkable=False):
+        super().__init__()
+        self.setObjectName("card")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(20, 16, 20, 16)
+        outer.setSpacing(12)
+
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        icon_label = QLabel()
+        icon_label.setPixmap(_svg_pixmap(icon, theme.TEXT_MUTED))
+        header.addWidget(icon_label)
+        title_label = QLabel(title)
+        title_label.setObjectName("cardTitle")
+        header.addWidget(title_label)
+        if tag:
+            tag_label = QLabel(tag)
+            tag_label.setObjectName("cardTag")
+            header.addWidget(tag_label)
+        header.addStretch(1)
+        self.badge = QLabel("")
+        self.badge.setObjectName("cardBadge")
+        header.addWidget(self.badge)
+        self.switch = None
+        if checkable:
+            self.switch = QCheckBox()
+            self.switch.setProperty("accent", "teal")
+            header.addWidget(self.switch)
+        outer.addLayout(header)
+
+        self.body = QWidget()
+        self.body.setObjectName("cardBody")
+        self.form = QFormLayout(self.body)
+        outer.addWidget(self.body)
+
+        if self.switch is not None:
+            self.switch.toggled.connect(self.body.setEnabled)
+            self.body.setEnabled(False)
+
+    def set_badge(self, text):
+        self.badge.setText(text)
+
+
+class GameRowWidget(QWidget):
+    """Uma linha da lista de jogos: nome+appid a esquerda, chips (ou um
+    texto descritivo) a direita."""
+
+    def __init__(self, name, appid, chips, meta):
+        super().__init__()
+        self.setObjectName("gameRow")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 9, 12, 9)
+        layout.setSpacing(10)
+
+        info = QVBoxLayout()
+        info.setSpacing(2)
+        name_label = QLabel(name)
+        name_label.setObjectName("gameName")
+        name_label.setWordWrap(True)
+        appid_label = QLabel(f"AppID {appid}")
+        appid_label.setObjectName("gameAppid")
+        info.addWidget(name_label)
+        info.addWidget(appid_label)
+        layout.addLayout(info, 1)
+
+        if chips:
+            chip_row = QHBoxLayout()
+            chip_row.setSpacing(5)
+            for label, dashed in chips:
+                chip = QLabel(label)
+                chip.setObjectName("chip")
+                if dashed:
+                    chip.setProperty("dashed", "true")
+                chip_row.addWidget(chip)
+            layout.addLayout(chip_row)
+        elif meta:
+            meta_label = QLabel(meta)
+            meta_label.setObjectName("gameMeta")
+            layout.addWidget(meta_label)
+
+
+def summary_chips_for(value_pairs, appid, excluded):
+    """Devolve (chips, meta) pra uma linha da lista de jogos. chips e uma
+    lista de (rotulo, tracejado) pra exibir como pilulas; meta e um texto
+    descritivo usado so quando nao ha nenhum chip."""
     if appid in excluded:
-        return "gerenciado manualmente"
+        return [("gerenciado manualmente", True)], None
     raw = core.find(value_pairs, "LaunchOptions") or ""
     if not raw:
-        return "— (padrao da Steam)"
+        return [], "padrao da Steam"
     parsed, _ = core.parse_launch_options(raw)
-    parts = []
+    chips = []
     if parsed["gamemode"]:
-        parts.append("gamemode")
+        chips.append(("gamemode", False))
     if parsed["mangohud"]:
-        parts.append("mangohud")
+        chips.append(("mangohud", False))
     if parsed["gamescope"]:
-        parts.append("gamescope")
+        chips.append(("gamescope", False))
+    lsfg = parsed["lsfg"]
+    if lsfg["profile"] or lsfg["multiplier"] or lsfg["flow_scale"] or lsfg["performance_mode"]:
+        chips.append(("lsfg-vk", False))
     if parsed["extra"]:
-        parts.append("extra")
-    return " + ".join(parts) if parts else "customizado"
+        chips.append(("extra", False))
+    if chips:
+        return chips, None
+    return [], "customizado"
 
 
 class DetailPanel(QWidget):
@@ -115,6 +271,7 @@ class DetailPanel(QWidget):
         layout.addWidget(self.title)
 
         self.managed_check = QCheckBox("Gerenciado manualmente (steam-boost nao mexe)")
+        _set_icon(self.managed_check, "lock")
         self.managed_check.setProperty("accent", "neutral")
         self.managed_check.toggled.connect(self._on_managed_toggled)
         layout.addWidget(self.managed_check)
@@ -122,23 +279,27 @@ class DetailPanel(QWidget):
         self.controls = QWidget()
         controls_layout = QVBoxLayout(self.controls)
         controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(14)
 
         self.gamemode_check = QCheckBox("gamemode (gamemoderun)")
+        _set_icon(self.gamemode_check, "gamemode")
         self.mangohud_check = QCheckBox("MangoHud (overlay de desempenho)")
+        _set_icon(self.mangohud_check, "mangohud")
         controls_layout.addWidget(self.gamemode_check)
         controls_layout.addWidget(self.mangohud_check)
 
-        self.gamescope_box = QGroupBox("gamescope")
-        self.gamescope_box.setCheckable(True)
-        gs_form = QFormLayout(self.gamescope_box)
+        gamescope_card = Card(ICONS["gamescope"], "gamescope", checkable=True)
+        self.gamescope_card = gamescope_card
+        self.gamescope_box = gamescope_card.switch
+        gs_form = gamescope_card.form
         self.gs_render_width = QLineEdit()
-        self.gs_render_width.setPlaceholderText("ex: 1280 (renderiza menor, upscale p/ Largura)")
+        self.gs_render_width.setPlaceholderText("1280")
         self.gs_render_height = QLineEdit()
-        self.gs_render_height.setPlaceholderText("ex: 800 (opcional)")
+        self.gs_render_height.setPlaceholderText("800")
         self.gs_width = QLineEdit()
-        self.gs_width.setPlaceholderText("ex: 2560")
+        self.gs_width.setPlaceholderText("2560")
         self.gs_height = QLineEdit()
-        self.gs_height.setPlaceholderText("ex: 1440")
+        self.gs_height.setPlaceholderText("1440")
         self.gs_refresh = QLineEdit()
         self.gs_refresh.setPlaceholderText("ex: 165 (opcional)")
 
@@ -146,25 +307,28 @@ class DetailPanel(QWidget):
         self.gs_scaler_group, scaler_row = _make_segmented(self, GAMESCOPE_SCALERS)
 
         self.gs_fullscreen = QCheckBox("Tela cheia (-f)")
+        _set_icon(self.gs_fullscreen, "fullscreen")
         self.gs_fullscreen.setProperty("accent", "teal")
         self.gs_borderless = QCheckBox("Sem bordas (-b)")
+        _set_icon(self.gs_borderless, "borderless")
         self.gs_borderless.setProperty("accent", "teal")
         self.gs_grab = QCheckBox("Capturar teclado (-g)")
+        _set_icon(self.gs_grab, "keyboard")
         self.gs_grab.setProperty("accent", "teal")
         self.gs_force_grab_cursor = QCheckBox("Prender o cursor / mouse relativo (--force-grab-cursor)")
+        _set_icon(self.gs_force_grab_cursor, "cursor")
         self.gs_force_grab_cursor.setProperty("accent", "teal")
         self.gs_steam = QCheckBox("Integracao com overlay da Steam (-e)")
+        _set_icon(self.gs_steam, "steam")
         self.gs_steam.setProperty("accent", "teal")
         self.gs_adaptive_sync = QCheckBox("Adaptive Sync / VRR (--adaptive-sync)")
+        _set_icon(self.gs_adaptive_sync, "sync")
         self.gs_adaptive_sync.setProperty("accent", "teal")
         self.gs_framerate_limit = QLineEdit()
         self.gs_framerate_limit.setPlaceholderText("ex: 60 (opcional)")
         self.gs_extra = QLineEdit()
         self.gs_extra.setPlaceholderText("flags extras do gamescope (opcional)")
-        gs_form.addRow("Resolucao interna (largura)", self.gs_render_width)
-        gs_form.addRow("Resolucao interna (altura)", self.gs_render_height)
-        gs_form.addRow("Largura", self.gs_width)
-        gs_form.addRow("Altura", self.gs_height)
+        gs_form.addRow(self._build_resolution_mapper())
         gs_form.addRow("Taxa de atualizacao", self.gs_refresh)
         gs_form.addRow("Filtro de upscaling", filter_row)
         gs_form.addRow("Modo de escala (-S)", scaler_row)
@@ -176,17 +340,19 @@ class DetailPanel(QWidget):
         gs_form.addRow(self.gs_adaptive_sync)
         gs_form.addRow("Limite de FPS", self.gs_framerate_limit)
         gs_form.addRow("Extra", self.gs_extra)
-        controls_layout.addWidget(self.gamescope_box)
+        controls_layout.addWidget(gamescope_card)
 
-        self.proton_box = QGroupBox()
-        self._proton_box_base_title = "Proton / Wine (avancado)"
-        self.proton_box.setTitle(self._proton_box_base_title)
-        proton_form = QFormLayout(self.proton_box)
+        proton_card = Card(ICONS["proton"], "Proton / Wine", tag="avancado", checkable=False)
+        self.proton_card = proton_card
+        proton_form = proton_card.form
         self.proton_no_esync = QCheckBox("Desativar ESync (PROTON_NO_ESYNC)")
+        _set_icon(self.proton_no_esync, "sync")
         self.proton_no_esync.setProperty("accent", "teal")
         self.proton_no_fsync = QCheckBox("Desativar FSync (PROTON_NO_FSYNC)")
+        _set_icon(self.proton_no_fsync, "sync")
         self.proton_no_fsync.setProperty("accent", "teal")
         self.proton_nvapi = QCheckBox("Habilitar NVAPI / DLSS (PROTON_ENABLE_NVAPI)")
+        _set_icon(self.proton_nvapi, "bolt")
         self.proton_nvapi.setProperty("accent", "teal")
         self.proton_vkd3d = QLineEdit()
         self.proton_vkd3d.setPlaceholderText("ex: dxr,dxr11 (ray tracing DX12, opcional)")
@@ -194,7 +360,37 @@ class DetailPanel(QWidget):
         proton_form.addRow(self.proton_no_fsync)
         proton_form.addRow(self.proton_nvapi)
         proton_form.addRow("VKD3D_CONFIG", self.proton_vkd3d)
-        controls_layout.addWidget(self.proton_box)
+        controls_layout.addWidget(proton_card)
+
+        self.lsfg_disable_check = QCheckBox("Desativar lsfg-vk neste jogo (DISABLE_LSFGVK)")
+        _set_icon(self.lsfg_disable_check, "disable")
+        self.lsfg_disable_check.setProperty("accent", "neutral")
+        controls_layout.addWidget(self.lsfg_disable_check)
+
+        lsfg_card = Card(ICONS["lsfg"], "lsfg-vk", tag="Lossless Scaling", checkable=True)
+        self.lsfg_card = lsfg_card
+        self.lsfg_box = lsfg_card.switch
+        lsfg_form = lsfg_card.form
+        lsfg_hint = QLabel(
+            "Requer lsfg-vk instalado a parte e o Lossless Scaling na sua"
+            " biblioteca Steam (fornece a Lossless.dll)."
+        )
+        lsfg_hint.setObjectName("cardHint")
+        lsfg_hint.setWordWrap(True)
+        lsfg_form.addRow(lsfg_hint)
+        self.lsfg_profile = QLineEdit()
+        self.lsfg_profile.setPlaceholderText("nome do perfil no conf.toml (opcional)")
+        self.lsfg_multiplier_group, lsfg_multiplier_row = _make_segmented(self, LSFG_MULTIPLIERS)
+        self.lsfg_flow_scale = QLineEdit()
+        self.lsfg_flow_scale.setPlaceholderText("0.25 a 1.0 (opcional)")
+        self.lsfg_performance_mode = QCheckBox("Modo desempenho (mais leve)")
+        _set_icon(self.lsfg_performance_mode, "bolt")
+        self.lsfg_performance_mode.setProperty("accent", "teal")
+        lsfg_form.addRow("Perfil (LSFGVK_PROFILE)", self.lsfg_profile)
+        lsfg_form.addRow("Multiplicador de frames", lsfg_multiplier_row)
+        lsfg_form.addRow("Flow scale", self.lsfg_flow_scale)
+        lsfg_form.addRow(self.lsfg_performance_mode)
+        controls_layout.addWidget(lsfg_card)
 
         extra_form = QFormLayout()
         self.extra_edit = QLineEdit()
@@ -246,12 +442,18 @@ class DetailPanel(QWidget):
             self.proton_no_fsync,
             self.proton_nvapi,
             self.proton_vkd3d,
+            self.lsfg_disable_check,
+            self.lsfg_box,
+            self.lsfg_profile,
+            self.lsfg_flow_scale,
+            self.lsfg_performance_mode,
             self.extra_edit,
         ):
             sig = getattr(w, "toggled", None) or getattr(w, "textChanged", None)
             sig.connect(self._refresh_preview)
         self.gs_filter_group.buttonToggled.connect(self._refresh_preview)
         self.gs_scaler_group.buttonToggled.connect(self._refresh_preview)
+        self.lsfg_multiplier_group.buttonToggled.connect(self._refresh_preview)
 
         # Preencher qualquer campo do gamescope (ou ligar um dos toggles dele)
         # liga sozinho o switch mestre do card — sem isso, os valores digitados
@@ -279,7 +481,60 @@ class DetailPanel(QWidget):
         self.gs_filter_group.buttonToggled.connect(self._auto_enable_gamescope_on_filter)
         self.gs_scaler_group.buttonToggled.connect(self._auto_enable_gamescope_on_filter)
 
+        # Mesma logica do gamescope: preencher um campo do lsfg-vk liga
+        # sozinho o switch mestre do card (sem isso o LSFGVK_ENV=1 nunca
+        # seria emitido e os valores digitados nao teriam efeito nenhum).
+        for field in (self.lsfg_profile, self.lsfg_flow_scale):
+            field.textChanged.connect(self._auto_enable_lsfg_on_text)
+        self.lsfg_performance_mode.toggled.connect(self._auto_enable_lsfg_on_bool)
+        self.lsfg_multiplier_group.buttonToggled.connect(self._auto_enable_lsfg_on_filter)
+
         self.set_game(None)
+
+    def _build_resolution_mapper(self):
+        """Bloco visual com resolucao interna -> seta -> resolucao de
+        saida, no lugar de quatro campos soltos sem relacao visual."""
+        box = QWidget()
+        box.setObjectName("resMapper")
+        row = QHBoxLayout(box)
+        row.setContentsMargins(14, 12, 14, 12)
+        row.setSpacing(14)
+
+        for edit in (self.gs_render_width, self.gs_render_height, self.gs_width, self.gs_height):
+            edit.setFixedWidth(64)
+            edit.setAlignment(Qt.AlignCenter)
+
+        def pair_col(label_text, w_edit, h_edit):
+            col = QVBoxLayout()
+            col.setSpacing(6)
+            label = QLabel(label_text)
+            label.setObjectName("miniLabel")
+            col.addWidget(label)
+            pair = QHBoxLayout()
+            pair.setSpacing(6)
+            pair.addWidget(w_edit)
+            times = QLabel("×")
+            times.setObjectName("miniLabel")
+            pair.addWidget(times)
+            pair.addWidget(h_edit)
+            col.addLayout(pair)
+            return col
+
+        row.addLayout(pair_col("Interna (render)", self.gs_render_width, self.gs_render_height))
+
+        arrow_col = QVBoxLayout()
+        arrow_col.setSpacing(3)
+        arrow_icon = QLabel()
+        arrow_icon.setPixmap(_svg_pixmap(ICONS["arrow"], theme.TEXT_FAINT))
+        arrow_col.addWidget(arrow_icon, alignment=Qt.AlignHCenter)
+        arrow_text = QLabel("upscale")
+        arrow_text.setObjectName("miniLabel")
+        arrow_col.addWidget(arrow_text, alignment=Qt.AlignHCenter)
+        row.addLayout(arrow_col)
+
+        row.addLayout(pair_col("Saida (tela)", self.gs_width, self.gs_height))
+        row.addStretch(1)
+        return box
 
     def _auto_enable_gamescope(self):
         if not self.gamescope_box.isChecked():
@@ -296,6 +551,22 @@ class DetailPanel(QWidget):
     def _auto_enable_gamescope_on_filter(self, button, checked):
         if checked and button.property("value"):
             self._auto_enable_gamescope()
+
+    def _auto_enable_lsfg(self):
+        if not self.lsfg_box.isChecked():
+            self.lsfg_box.setChecked(True)
+
+    def _auto_enable_lsfg_on_text(self, text):
+        if text.strip():
+            self._auto_enable_lsfg()
+
+    def _auto_enable_lsfg_on_bool(self, checked):
+        if checked:
+            self._auto_enable_lsfg()
+
+    def _auto_enable_lsfg_on_filter(self, button, checked):
+        if checked and button.property("value"):
+            self._auto_enable_lsfg()
 
     def _on_managed_toggled(self, checked):
         self.controls.setEnabled(not checked)
@@ -358,6 +629,17 @@ class DetailPanel(QWidget):
         self.proton_nvapi.setChecked(proton["enable_nvapi"])
         self.proton_vkd3d.setText(proton["vkd3d_config"])
 
+        lsfg = parsed["lsfg"]
+        self.lsfg_disable_check.setChecked(lsfg["disable"])
+        lsfg_active = bool(
+            lsfg["profile"] or lsfg["multiplier"] or lsfg["flow_scale"] or lsfg["performance_mode"]
+        )
+        self.lsfg_box.setChecked(lsfg_active)
+        self.lsfg_profile.setText(lsfg["profile"])
+        _set_segmented_value(self.lsfg_multiplier_group, lsfg["multiplier"])
+        self.lsfg_flow_scale.setText(lsfg["flow_scale"])
+        self.lsfg_performance_mode.setChecked(lsfg["performance_mode"])
+
         self.extra_edit.setText(parsed["extra"])
 
         self.controls.setEnabled(not game["excluded"])
@@ -393,25 +675,55 @@ class DetailPanel(QWidget):
             "vkd3d_config": self.proton_vkd3d.text().strip(),
         }
 
+    def _current_lsfg_dict(self):
+        disable = self.lsfg_disable_check.isChecked()
+        if not self.lsfg_box.isChecked():
+            return {"disable": disable} if disable else None
+        return {
+            "disable": disable,
+            "profile": self.lsfg_profile.text().strip(),
+            "multiplier": _segmented_value(self.lsfg_multiplier_group),
+            "flow_scale": self.lsfg_flow_scale.text().strip(),
+            "performance_mode": self.lsfg_performance_mode.isChecked(),
+        }
+
     def _refresh_preview(self, *_):
         if not self.game:
             return
         proton = self._current_proton_dict()
+        lsfg = self._current_lsfg_dict()
         new = core.build_launch_options(
             self.gamemode_check.isChecked(),
             self.mangohud_check.isChecked(),
             self._current_gamescope_dict(),
             self.extra_edit.text().strip(),
             proton=proton,
+            lsfg=lsfg,
         )
         self._preview_text = new
         self.preview.setText(theme.colorize_command(new))
 
-        active = sum([proton["no_esync"], proton["no_fsync"], proton["enable_nvapi"], bool(proton["vkd3d_config"])])
-        title = self._proton_box_base_title
-        if active:
-            title += f" — {active} ativa{'s' if active != 1 else ''}"
-        self.proton_box.setTitle(title)
+        proton_active = sum(
+            [proton["no_esync"], proton["no_fsync"], proton["enable_nvapi"], bool(proton["vkd3d_config"])]
+        )
+        self.proton_card.set_badge(
+            f"{proton_active} ativa{'s' if proton_active != 1 else ''}" if proton_active else ""
+        )
+
+        self.gamescope_card.set_badge("ativo" if self.gamescope_box.isChecked() else "")
+
+        if self.lsfg_box.isChecked():
+            lsfg_active = sum(
+                [
+                    bool(self.lsfg_profile.text().strip()),
+                    bool(_segmented_value(self.lsfg_multiplier_group)),
+                    bool(self.lsfg_flow_scale.text().strip()),
+                    self.lsfg_performance_mode.isChecked(),
+                ]
+            )
+        else:
+            lsfg_active = 0
+        self.lsfg_card.set_badge(f"{lsfg_active} ativa{'s' if lsfg_active != 1 else ''}" if lsfg_active else "")
 
     def _apply(self):
         if not self.game:
@@ -432,7 +744,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("GBSteamParams — gamemode / mangohud / gamescope")
         self.setWindowIcon(QIcon(str(ICON_PATH)))
-        self.resize(1000, 600)
+        self.resize(1100, 680)
 
         self.root = core.steam_root()
         if not self.root:
@@ -454,24 +766,55 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
 
-        self.status_label = QLabel()
-        main_layout.addWidget(self.status_label)
+        status_row = QHBoxLayout()
+        self.status_path_label = QLabel()
+        self.status_path_label.setObjectName("statusPath")
+        status_row.addWidget(self.status_path_label, 1)
+
+        self.status_pill = QWidget()
+        self.status_pill.setObjectName("statusPill")
+        pill_row = QHBoxLayout(self.status_pill)
+        pill_row.setContentsMargins(10, 4, 10, 4)
+        pill_row.setSpacing(7)
+        self.status_dot = QLabel()
+        self.status_dot.setObjectName("statusDot")
+        self.status_dot.setFixedSize(8, 8)
+        self.status_pill_text = QLabel()
+        self.status_pill_text.setObjectName("statusPillText")
+        pill_row.addWidget(self.status_dot)
+        pill_row.addWidget(self.status_pill_text)
+        status_row.addWidget(self.status_pill)
+        main_layout.addLayout(status_row)
 
         splitter = QSplitter(Qt.Horizontal)
         main_layout.addWidget(splitter, 1)
 
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Jogo", "AppID", "Opcoes"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.itemSelectionChanged.connect(self._on_row_selected)
-        splitter.addWidget(self.table)
+        games_panel = QWidget()
+        games_panel_layout = QVBoxLayout(games_panel)
+        games_panel_layout.setContentsMargins(14, 12, 14, 8)
+        games_panel_layout.setSpacing(8)
+
+        library_header = QHBoxLayout()
+        library_title = QLabel("Biblioteca")
+        library_title.setObjectName("libraryTitle")
+        library_header.addWidget(library_title)
+        self.library_count = QLabel("")
+        self.library_count.setObjectName("libraryCount")
+        library_header.addWidget(self.library_count)
+        library_header.addStretch(1)
+        games_panel_layout.addLayout(library_header)
+
+        self.games_list = QListWidget()
+        self.games_list.setSelectionMode(QListWidget.SingleSelection)
+        self.games_list.setEditTriggers(QListWidget.NoEditTriggers)
+        self.games_list.setSpacing(2)
+        self.games_list.itemSelectionChanged.connect(self._on_row_selected)
+        games_panel_layout.addWidget(self.games_list, 1)
+        splitter.addWidget(games_panel)
 
         self.detail = DetailPanel(on_apply=self._on_game_applied)
         splitter.addWidget(self.detail)
-        splitter.setSizes([550, 450])
+        splitter.setSizes([550, 550])
 
         bottom = QHBoxLayout()
         self.reload_btn = QPushButton("Recarregar")
@@ -492,13 +835,16 @@ class MainWindow(QMainWindow):
         self.load_games()
 
     # -----------------------------------------------------------------
-    def _steam_status_text(self):
+    def _update_status(self):
         running = core.is_steam_running()
-        return (
-            "Steam ABERTA — feche antes de salvar para evitar que ela sobrescreva o arquivo."
-            if running
-            else "Steam fechada — seguro para salvar."
+        state = "warn" if running else "ok"
+        theme.set_widget_state(self.status_pill, state)
+        theme.set_widget_state(self.status_dot, state)
+        theme.set_widget_state(self.status_pill_text, state)
+        self.status_pill_text.setText(
+            "Steam ABERTA — feche antes de salvar" if running else "Steam fechada — seguro para salvar"
         )
+        self.status_path_label.setText(str(self.cfg_path))
 
     def load_games(self):
         text = open(self.cfg_path, encoding="utf-8", errors="replace").read()
@@ -513,29 +859,36 @@ class MainWindow(QMainWindow):
             if not isinstance(value, list):
                 continue
             name = self.names.get(appid, "")
+            if not name:
+                # sem entrada em appid_name_map = jogo nao instalado
+                # (nenhum appmanifest_<appid>.acf em nenhuma library)
+                continue
             if core.SKIP_NAME_RE.search(name):
                 continue
             self.games.append({
                 "appid": appid,
-                "name": name or "(sem nome conhecido)",
+                "name": name,
                 "value": value,
                 "excluded": appid in self.excluded,
                 "dirty": False,
             })
-        self.games.sort(key=lambda g: (g["name"].startswith("("), g["name"].lower()))
+        self.games.sort(key=lambda g: g["name"].lower())
 
-        self._refresh_table()
-        self.status_label.setText(f"{self.cfg_path}  —  {self._steam_status_text()}")
+        self._refresh_games_list()
+        self.games_list.setCurrentRow(-1)
+        self._update_status()
         self.detail.set_game(None)
 
-    def _refresh_table(self):
-        self.table.setRowCount(len(self.games))
-        for row, game in enumerate(self.games):
-            self.table.setItem(row, 0, QTableWidgetItem(game["name"]))
-            self.table.setItem(row, 1, QTableWidgetItem(game["appid"]))
-            self.table.setItem(
-                row, 2, QTableWidgetItem(summary_for(game["value"], game["appid"], self.excluded))
-            )
+    def _refresh_games_list(self):
+        self.games_list.clear()
+        self.library_count.setText(f"{len(self.games)} jogos")
+        for game in self.games:
+            chips, meta = summary_chips_for(game["value"], game["appid"], self.excluded)
+            row_widget = GameRowWidget(game["name"], game["appid"], chips, meta)
+            item = QListWidgetItem()
+            item.setSizeHint(row_widget.sizeHint())
+            self.games_list.addItem(item)
+            self.games_list.setItemWidget(item, row_widget)
 
     def _flush_detail(self):
         """Grava no jogo selecionado o que esta no painel, mesmo sem clicar
@@ -547,11 +900,11 @@ class MainWindow(QMainWindow):
 
     def _on_row_selected(self):
         self._flush_detail()
-        rows = self.table.selectionModel().selectedRows()
-        if not rows:
+        row = self.games_list.currentRow()
+        if row < 0:
             self.detail.set_game(None)
             return
-        game = self.games[rows[0].row()]
+        game = self.games[row]
         self.detail.set_game(game)
 
     def _on_game_applied(self, game):
@@ -560,7 +913,10 @@ class MainWindow(QMainWindow):
         else:
             self.excluded.discard(game["appid"])
         row = self.games.index(game)
-        self.table.item(row, 2).setText(summary_for(game["value"], game["appid"], self.excluded))
+        self._refresh_games_list()
+        self.games_list.blockSignals(True)
+        self.games_list.setCurrentRow(row)
+        self.games_list.blockSignals(False)
 
     def _apply_bulk_default(self):
         count = 0
@@ -573,8 +929,12 @@ class MainWindow(QMainWindow):
                 core.set_value(game["value"], "LaunchOptions", new)
                 game["dirty"] = True
                 count += 1
-        self._refresh_table()
-        if self.detail.game:
+        current_game = self.detail.game
+        self._refresh_games_list()
+        if current_game:
+            self.games_list.blockSignals(True)
+            self.games_list.setCurrentRow(self.games.index(current_game))
+            self.games_list.blockSignals(False)
             self.detail._load_from_game()
         QMessageBox.information(self, "Aplicado", f"{count} jogo(s) atualizado(s) com gamemode+mangohud.")
 
@@ -602,7 +962,7 @@ class MainWindow(QMainWindow):
             self, "Salvo",
             f"Alteracoes gravadas.\nBackup: {backup}\n\nAbra a Steam para os jogos pegarem as novas opcoes.",
         )
-        self.status_label.setText(f"{self.cfg_path}  —  {self._steam_status_text()}")
+        self._update_status()
 
 
 def main():

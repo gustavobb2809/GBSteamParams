@@ -299,14 +299,33 @@ PROTON_FLAG_VARS = {
     "PROTON_ENABLE_NVAPI": "enable_nvapi",
 }
 
+# lsfg-vk (https://lsfg-vk.dev) - camada Vulkan que roda o frame
+# generation do Lossless Scaling no Linux. Precisa ser instalada a parte
+# (pacote da distro/AUR/build manual) e do proprio Lossless Scaling
+# (appid 993090 na Steam) para fornecer a Lossless.dll.
+LSFG_FLAG_VARS = {
+    "DISABLE_LSFGVK": "disable",
+    "LSFGVK_PERFORMANCE_MODE": "performance_mode",
+}
+LSFG_VALUE_VARS = {
+    "LSFGVK_PROFILE": "profile",
+    "LSFGVK_MULTIPLIER": "multiplier",
+    "LSFGVK_FLOW_SCALE": "flow_scale",
+}
+# LSFGVK_ENV=1 e sempre recalculado a partir dos outros campos (ver
+# build_launch_options), entao so precisa ser reconhecido e descartado
+# aqui pra nao duplicar/vazar pro campo de opcoes extras.
+LSFG_SKIP_VARS = {"LSFGVK_ENV"}
+
 
 def parse_launch_options(s):
     """String de LaunchOptions -> dict estruturado {gamemode, mangohud,
-    gamescope, proton, extra, suffix}. gamescope e None ou dict com
+    gamescope, proton, lsfg, extra, suffix}. gamescope e None ou dict com
     width/height/render_width/render_height/refresh/filter/scaler/
     fullscreen/borderless/grab/force_grab_cursor/steam/adaptive_sync/
-    framerate_limit/extra. proton e dict
-    com no_esync/no_fsync/enable_nvapi/vkd3d_config."""
+    framerate_limit/extra. proton e dict com
+    no_esync/no_fsync/enable_nvapi/vkd3d_config. lsfg e dict com
+    disable/profile/multiplier/flow_scale/performance_mode."""
     s = s or ""
     if "%command%" in s:
         prefix, suffix = s.split("%command%", 1)
@@ -330,6 +349,13 @@ def parse_launch_options(s):
             "enable_nvapi": False,
             "vkd3d_config": "",
         },
+        "lsfg": {
+            "disable": False,
+            "profile": "",
+            "multiplier": "",
+            "flow_scale": "",
+            "performance_mode": False,
+        },
         "extra": "",
     }
 
@@ -341,6 +367,12 @@ def parse_launch_options(s):
             result["proton"][PROTON_FLAG_VARS[var]] = True
         elif var == "VKD3D_CONFIG":
             result["proton"]["vkd3d_config"] = val
+        elif var in LSFG_FLAG_VARS and val == "1":
+            result["lsfg"][LSFG_FLAG_VARS[var]] = True
+        elif var in LSFG_VALUE_VARS:
+            result["lsfg"][LSFG_VALUE_VARS[var]] = val
+        elif var in LSFG_SKIP_VARS:
+            pass
         else:
             remaining.append(tok)
     outer = remaining
@@ -437,13 +469,16 @@ def parse_launch_options(s):
     return result, suffix.strip()
 
 
-def build_launch_options(gamemode, mangohud, gamescope, extra, suffix="", proton=None):
+def build_launch_options(gamemode, mangohud, gamescope, extra, suffix="", proton=None, lsfg=None):
     """Inverso de parse_launch_options: monta a string de LaunchOptions.
     gamescope: None, ou dict com enabled/width/height/render_width/
     render_height/refresh/filter/scaler/fullscreen/borderless/grab/
     force_grab_cursor/steam/adaptive_sync/framerate_limit/extra.
     proton: None, ou dict com
-    no_esync/no_fsync/enable_nvapi/vkd3d_config."""
+    no_esync/no_fsync/enable_nvapi/vkd3d_config. lsfg: None, ou dict com
+    disable/profile/multiplier/flow_scale/performance_mode (LSFGVK_ENV=1
+    e adicionado sozinho quando multiplier/flow_scale/performance_mode
+    estao presentes, ver docs do lsfg-vk)."""
     tokens = []
 
     if proton:
@@ -455,6 +490,23 @@ def build_launch_options(gamemode, mangohud, gamescope, extra, suffix="", proton
             tokens.append("PROTON_ENABLE_NVAPI=1")
         if proton.get("vkd3d_config"):
             tokens.append(f"VKD3D_CONFIG={proton['vkd3d_config']}")
+
+    if lsfg:
+        if lsfg.get("disable"):
+            tokens.append("DISABLE_LSFGVK=1")
+        if lsfg.get("profile"):
+            tokens.append(f"LSFGVK_PROFILE={lsfg['profile']}")
+        needs_env = bool(
+            lsfg.get("multiplier") or lsfg.get("flow_scale") or lsfg.get("performance_mode")
+        )
+        if needs_env:
+            tokens.append("LSFGVK_ENV=1")
+            if lsfg.get("multiplier"):
+                tokens.append(f"LSFGVK_MULTIPLIER={lsfg['multiplier']}")
+            if lsfg.get("flow_scale"):
+                tokens.append(f"LSFGVK_FLOW_SCALE={lsfg['flow_scale']}")
+            if lsfg.get("performance_mode"):
+                tokens.append("LSFGVK_PERFORMANCE_MODE=1")
 
     if gamemode:
         tokens.append("gamemoderun")

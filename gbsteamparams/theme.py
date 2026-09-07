@@ -19,6 +19,8 @@ ACCENT_HOVER = "#ffbc5e"
 ACCENT_INK = "#1f1306"
 ACCENT_2 = "#17d0d8"
 ACCENT_2_TEXT = "#92f1f6"
+WARNING = "#f75d59"
+WARNING_TEXT = "#ffb4ad"
 
 STYLESHEET = f"""
 QWidget {{
@@ -64,34 +66,45 @@ QCheckBox[accent="neutral"]::indicator:checked {{
 }}
 QCheckBox:disabled {{ color: {TEXT_FAINT}; }}
 
-QGroupBox {{
+QWidget#card {{
     background: {SURFACE};
     border: 1px solid {BORDER};
     border-radius: 14px;
-    margin-top: 16px;
-    padding: 20px 16px 14px 16px;
+}}
+QLabel#cardTitle {{
+    color: {TEXT};
     font-weight: 800;
     font-size: 14px;
-    color: {TEXT};
 }}
-QGroupBox::title {{
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 14px;
-    top: 3px;
-    padding: 0 6px;
-    background: {SURFACE};
-}}
-QGroupBox::indicator {{
-    width: 34px;
-    height: 18px;
-    border-radius: 9px;
+QLabel#cardTag {{
     background: {SURFACE_3};
+    color: {TEXT_MUTED};
     border: 1px solid {BORDER};
+    border-radius: 9px;
+    padding: 2px 9px;
+    font-size: 10.5px;
+    font-weight: 700;
 }}
-QGroupBox::indicator:checked {{
-    background: {ACCENT_2};
-    border-color: {ACCENT_2};
+QLabel#cardBadge {{
+    color: {TEXT_FAINT};
+    font-weight: 700;
+    font-size: 11.5px;
+}}
+QLabel#cardHint {{
+    color: {TEXT_MUTED};
+    font-weight: 500;
+    font-size: 12.5px;
+}}
+QWidget#cardBody {{ background: transparent; }}
+QWidget#resMapper {{
+    background: {SURFACE_2};
+    border-radius: 10px;
+}}
+QLabel#miniLabel {{
+    color: {TEXT_FAINT};
+    font-weight: 700;
+    font-size: 10.5px;
+    text-transform: uppercase;
 }}
 
 QLineEdit, QComboBox {{
@@ -146,22 +159,35 @@ QPushButton[role="segment"]:checked {{
     color: {ACCENT_2_TEXT};
 }}
 
-QTableWidget {{
+QListWidget {{
     background: {BG};
     border: none;
-    gridline-color: transparent;
-    color: {TEXT};
+    outline: none;
 }}
-QTableWidget::item {{ padding: 10px 8px; border-bottom: 1px solid {BORDER}; }}
-QTableWidget::item:selected {{ background: rgba(247, 162, 36, 28); color: {TEXT}; }}
-QHeaderView::section {{
-    background: {BG};
+QListWidget::item {{ border-radius: 10px; margin: 1px 4px; padding: 0; }}
+QListWidget::item:selected {{ background: rgba(247, 162, 36, 26); border-left: 3px solid {ACCENT}; }}
+QListWidget::item:hover:!selected {{ background: {SURFACE_2}; }}
+QWidget#gameRow {{ background: transparent; }}
+QLabel#gameName {{ color: {TEXT}; font-weight: 700; font-size: 13.5px; }}
+QLabel#gameAppid {{
     color: {TEXT_FAINT};
-    border: none;
-    border-bottom: 1px solid {BORDER};
-    padding: 8px;
+    font-weight: 600;
+    font-size: 11px;
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+}}
+QLabel#gameMeta {{ color: {TEXT_FAINT}; font-weight: 600; font-style: italic; font-size: 11.5px; }}
+QLabel#chip {{
+    background: {SURFACE_2};
+    color: {TEXT_MUTED};
+    border: 1px solid {BORDER};
+    border-radius: 10px;
+    padding: 3px 9px;
+    font-size: 10.5px;
     font-weight: 700;
 }}
+QLabel#chip[dashed="true"] {{ border-style: dashed; font-style: italic; }}
+QLabel#libraryTitle {{ color: {TEXT}; font-weight: 800; font-size: 14px; }}
+QLabel#libraryCount {{ color: {TEXT_FAINT}; font-weight: 600; font-size: 12px; }}
 
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 0; }}
 QScrollBar::handle:vertical {{ background: {SURFACE_3}; border-radius: 5px; min-height: 24px; }}
@@ -183,8 +209,31 @@ QLabel#detailTitle {{
     font-weight: 800;
     font-size: 16px;
 }}
+QWidget#statusPill {{
+    background: rgba(23, 208, 216, 24);
+    border: 1px solid rgba(23, 208, 216, 100);
+    border-radius: 12px;
+}}
+QWidget#statusPill[state="warn"] {{
+    background: rgba(247, 93, 89, 26);
+    border-color: rgba(247, 93, 89, 130);
+}}
+QLabel#statusDot {{ background: {ACCENT_2}; border-radius: 4px; }}
+QLabel#statusDot[state="warn"] {{ background: {WARNING}; }}
+QLabel#statusPillText {{ color: {ACCENT_2_TEXT}; font-weight: 700; font-size: 12px; }}
+QLabel#statusPillText[state="warn"] {{ color: {WARNING_TEXT}; }}
+QLabel#statusPath {{ color: {TEXT_FAINT}; font-weight: 500; font-size: 11.5px; }}
 QMessageBox {{ background: {SURFACE}; }}
 """
+
+def set_widget_state(widget, state):
+    """Muda uma propriedade dinamica 'state' (usada por seletores QSS tipo
+    [state="warn"]) e forca o Qt a reavaliar o estilo — sem isso a mudanca
+    de cor so aparece depois de outro evento de repaint qualquer."""
+    widget.setProperty("state", state)
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
+
 
 _TOKEN_COLORS = {
     "cmd": ACCENT,

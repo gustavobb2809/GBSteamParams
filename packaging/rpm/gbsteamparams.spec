@@ -14,6 +14,7 @@ Requires:       python3
 Requires:       python3-pyside6
 Requires:       gamemode
 Requires:       mangohud
+Requires:       gamescope
 
 %description
 Ferramenta CLI (steam-boost) e app de mesa (steam-boost-gui) para configurar

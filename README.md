@@ -37,7 +37,20 @@ gbsteamparams/
 
 ## Instalação
 
-Requer Python 3.10+ e PySide6 (para a GUI).
+Requer Python 3.10+, PySide6 (para a GUI) e, opcionalmente, `gamemode`,
+`mangohud` e `gamescope` instalados no sistema (o app funciona sem eles,
+mas as opções correspondentes não fazem nada em runtime se o binário não
+existir).
+
+Script que detecta a distro (Fedora/Debian-Ubuntu/Arch/openSUSE) e instala
+tudo isso, incluindo o próprio GBSteamParams em modo editável:
+
+```bash
+cd GBSteamParams
+./scripts/install-deps.sh
+```
+
+Ou manualmente, se preferir instalar as dependências de sistema você mesmo:
 
 ```bash
 cd GBSteamParams
@@ -82,6 +95,13 @@ steam-boost-gui
     com overlay da Steam (`-e`), Adaptive Sync/VRR e limite de FPS.
   - **Proton / Wine** (avançado): desativar ESync/FSync, habilitar
     NVAPI/DLSS e `VKD3D_CONFIG` (ray tracing DX12).
+  - **lsfg-vk** ([lsfg-vk.dev](https://lsfg-vk.dev), frame generation do
+    Lossless Scaling no Linux — instalação separada, ver
+    `scripts/install-deps.sh`, e requer o Lossless Scaling na sua
+    biblioteca Steam pra fornecer a `Lossless.dll`): perfil, multiplicador
+    de frames (2x/3x/4x), flow scale e modo desempenho. Tem também um
+    checkbox separado pra desativar em um jogo específico
+    (`DISABLE_LSFGVK`), independente do resto.
   - Opções extras livres (outras flags/env vars).
 - O preview mostra a string final de Launch Options em tempo real.
 - "Aplicar a este jogo" grava a mudança na memória; "Salvar alterações"
@@ -91,11 +111,7 @@ steam-boost-gui
 - "Gerenciado manualmente" tira o jogo da lista de jogos que o
   `steam-boost` (CLI ou botão "aplicar a todos") mexe.
 
-![Mockup do painel de detalhes](docs/gui-mockup.png)
-
-> A imagem acima é um mockup de referência (tema escuro) usado para guiar
-> uma futura reorganização visual da GUI — hoje o app ainda usa os
-> widgets padrão do Qt/tema do sistema, sem esse estilo customizado.
+![Painel de detalhes do GBSteamParams](docs/gui-screenshot.png)
 
 ## Sobre o gamescope
 
