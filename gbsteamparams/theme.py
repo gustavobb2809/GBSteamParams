@@ -66,36 +66,35 @@ QCheckBox[accent="neutral"]::indicator:checked {{
 }}
 QCheckBox:disabled {{ color: {TEXT_FAINT}; }}
 
-QWidget#card {{
+QGroupBox {{
     background: {SURFACE};
     border: 1px solid {BORDER};
     border-radius: 14px;
-}}
-QLabel#cardTitle {{
-    color: {TEXT};
+    margin-top: 16px;
+    padding: 20px 16px 14px 16px;
     font-weight: 800;
     font-size: 14px;
+    color: {TEXT};
 }}
-QLabel#cardTag {{
-    background: {SURFACE_3};
-    color: {TEXT_MUTED};
-    border: 1px solid {BORDER};
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 14px;
+    top: 3px;
+    padding: 0 6px;
+    background: {SURFACE};
+}}
+QGroupBox::indicator {{
+    width: 34px;
+    height: 18px;
     border-radius: 9px;
-    padding: 2px 9px;
-    font-size: 10.5px;
-    font-weight: 700;
+    background: {SURFACE_3};
+    border: 1px solid {BORDER};
 }}
-QLabel#cardBadge {{
-    color: {TEXT_FAINT};
-    font-weight: 700;
-    font-size: 11.5px;
+QGroupBox::indicator:checked {{
+    background: {ACCENT_2};
+    border-color: {ACCENT_2};
 }}
-QLabel#cardHint {{
-    color: {TEXT_MUTED};
-    font-weight: 500;
-    font-size: 12.5px;
-}}
-QWidget#cardBody {{ background: transparent; }}
 QWidget#resMapper {{
     background: {SURFACE_2};
     border-radius: 10px;
@@ -159,35 +158,22 @@ QPushButton[role="segment"]:checked {{
     color: {ACCENT_2_TEXT};
 }}
 
-QListWidget {{
+QTableWidget {{
     background: {BG};
     border: none;
-    outline: none;
+    gridline-color: transparent;
+    color: {TEXT};
 }}
-QListWidget::item {{ border-radius: 10px; margin: 1px 4px; padding: 0; }}
-QListWidget::item:selected {{ background: rgba(247, 162, 36, 26); border-left: 3px solid {ACCENT}; }}
-QListWidget::item:hover:!selected {{ background: {SURFACE_2}; }}
-QWidget#gameRow {{ background: transparent; }}
-QLabel#gameName {{ color: {TEXT}; font-weight: 700; font-size: 13.5px; }}
-QLabel#gameAppid {{
+QTableWidget::item {{ padding: 10px 8px; border-bottom: 1px solid {BORDER}; }}
+QTableWidget::item:selected {{ background: rgba(247, 162, 36, 28); color: {TEXT}; }}
+QHeaderView::section {{
+    background: {BG};
     color: {TEXT_FAINT};
-    font-weight: 600;
-    font-size: 11px;
-    font-family: "JetBrains Mono", "Fira Code", monospace;
-}}
-QLabel#gameMeta {{ color: {TEXT_FAINT}; font-weight: 600; font-style: italic; font-size: 11.5px; }}
-QLabel#chip {{
-    background: {SURFACE_2};
-    color: {TEXT_MUTED};
-    border: 1px solid {BORDER};
-    border-radius: 10px;
-    padding: 3px 9px;
-    font-size: 10.5px;
+    border: none;
+    border-bottom: 1px solid {BORDER};
+    padding: 8px;
     font-weight: 700;
 }}
-QLabel#chip[dashed="true"] {{ border-style: dashed; font-style: italic; }}
-QLabel#libraryTitle {{ color: {TEXT}; font-weight: 800; font-size: 14px; }}
-QLabel#libraryCount {{ color: {TEXT_FAINT}; font-weight: 600; font-size: 12px; }}
 
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 0; }}
 QScrollBar::handle:vertical {{ background: {SURFACE_3}; border-radius: 5px; min-height: 24px; }}

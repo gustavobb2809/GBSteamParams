@@ -15,15 +15,17 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
     QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -141,121 +143,28 @@ def _set_segmented_value(button_group, value):
         btn.setChecked(btn.property("value") == value)
 
 
-class Card(QWidget):
-    """Card com cabecalho (icone + titulo + tag estatica opcional + badge
-    dinamico + switch mestre opcional) e corpo em QFormLayout.
-
-    Quando checkable=True, `switch` e um QCheckBox comum — mesma API que
-    o resto do codigo ja espera (isChecked/setChecked/toggled) — e o
-    corpo do card fica automaticamente habilitado/desabilitado junto com
-    ele, do jeito que um QGroupBox checavel nativo ja fazia sozinho."""
-
-    def __init__(self, icon, title, tag=None, checkable=False):
-        super().__init__()
-        self.setObjectName("card")
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(20, 16, 20, 16)
-        outer.setSpacing(12)
-
-        header = QHBoxLayout()
-        header.setSpacing(10)
-        icon_label = QLabel()
-        icon_label.setPixmap(_svg_pixmap(icon, theme.TEXT_MUTED))
-        header.addWidget(icon_label)
-        title_label = QLabel(title)
-        title_label.setObjectName("cardTitle")
-        header.addWidget(title_label)
-        if tag:
-            tag_label = QLabel(tag)
-            tag_label.setObjectName("cardTag")
-            header.addWidget(tag_label)
-        header.addStretch(1)
-        self.badge = QLabel("")
-        self.badge.setObjectName("cardBadge")
-        header.addWidget(self.badge)
-        self.switch = None
-        if checkable:
-            self.switch = QCheckBox()
-            self.switch.setProperty("accent", "teal")
-            header.addWidget(self.switch)
-        outer.addLayout(header)
-
-        self.body = QWidget()
-        self.body.setObjectName("cardBody")
-        self.form = QFormLayout(self.body)
-        outer.addWidget(self.body)
-
-        if self.switch is not None:
-            self.switch.toggled.connect(self.body.setEnabled)
-            self.body.setEnabled(False)
-
-    def set_badge(self, text):
-        self.badge.setText(text)
-
-
-class GameRowWidget(QWidget):
-    """Uma linha da lista de jogos: nome+appid a esquerda, chips (ou um
-    texto descritivo) a direita."""
-
-    def __init__(self, name, appid, chips, meta):
-        super().__init__()
-        self.setObjectName("gameRow")
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 9, 12, 9)
-        layout.setSpacing(10)
-
-        info = QVBoxLayout()
-        info.setSpacing(2)
-        name_label = QLabel(name)
-        name_label.setObjectName("gameName")
-        name_label.setWordWrap(True)
-        appid_label = QLabel(f"AppID {appid}")
-        appid_label.setObjectName("gameAppid")
-        info.addWidget(name_label)
-        info.addWidget(appid_label)
-        layout.addLayout(info, 1)
-
-        if chips:
-            chip_row = QHBoxLayout()
-            chip_row.setSpacing(5)
-            for label, dashed in chips:
-                chip = QLabel(label)
-                chip.setObjectName("chip")
-                if dashed:
-                    chip.setProperty("dashed", "true")
-                chip_row.addWidget(chip)
-            layout.addLayout(chip_row)
-        elif meta:
-            meta_label = QLabel(meta)
-            meta_label.setObjectName("gameMeta")
-            layout.addWidget(meta_label)
-
-
-def summary_chips_for(value_pairs, appid, excluded):
-    """Devolve (chips, meta) pra uma linha da lista de jogos. chips e uma
-    lista de (rotulo, tracejado) pra exibir como pilulas; meta e um texto
-    descritivo usado so quando nao ha nenhum chip."""
+def summary_for(value_pairs, appid, excluded):
+    """Resumo em texto puro das opcoes ativas de um jogo, pra coluna
+    'Opcoes' da tabela."""
     if appid in excluded:
-        return [("gerenciado manualmente", True)], None
+        return "gerenciado manualmente"
     raw = core.find(value_pairs, "LaunchOptions") or ""
     if not raw:
-        return [], "padrao da Steam"
+        return "— (padrao da Steam)"
     parsed, _ = core.parse_launch_options(raw)
-    chips = []
+    parts = []
     if parsed["gamemode"]:
-        chips.append(("gamemode", False))
+        parts.append("gamemode")
     if parsed["mangohud"]:
-        chips.append(("mangohud", False))
+        parts.append("mangohud")
     if parsed["gamescope"]:
-        chips.append(("gamescope", False))
+        parts.append("gamescope")
     lsfg = parsed["lsfg"]
     if lsfg["profile"] or lsfg["multiplier"] or lsfg["flow_scale"] or lsfg["performance_mode"]:
-        chips.append(("lsfg-vk", False))
+        parts.append("lsfg-vk")
     if parsed["extra"]:
-        chips.append(("extra", False))
-    if chips:
-        return chips, None
-    return [], "customizado"
+        parts.append("extra")
+    return " + ".join(parts) if parts else "customizado"
 
 
 class DetailPanel(QWidget):
@@ -288,10 +197,11 @@ class DetailPanel(QWidget):
         controls_layout.addWidget(self.gamemode_check)
         controls_layout.addWidget(self.mangohud_check)
 
-        gamescope_card = Card(ICONS["gamescope"], "gamescope", checkable=True)
+        gamescope_card = QGroupBox("gamescope")
+        gamescope_card.setCheckable(True)
         self.gamescope_card = gamescope_card
-        self.gamescope_box = gamescope_card.switch
-        gs_form = gamescope_card.form
+        self.gamescope_box = gamescope_card
+        gs_form = QFormLayout(gamescope_card)
         self.gs_render_width = QLineEdit()
         self.gs_render_width.setPlaceholderText("1280")
         self.gs_render_height = QLineEdit()
@@ -342,9 +252,10 @@ class DetailPanel(QWidget):
         gs_form.addRow("Extra", self.gs_extra)
         controls_layout.addWidget(gamescope_card)
 
-        proton_card = Card(ICONS["proton"], "Proton / Wine", tag="avancado", checkable=False)
+        self._proton_box_base_title = "Proton / Wine (avancado)"
+        proton_card = QGroupBox(self._proton_box_base_title)
         self.proton_card = proton_card
-        proton_form = proton_card.form
+        proton_form = QFormLayout(proton_card)
         self.proton_no_esync = QCheckBox("Desativar ESync (PROTON_NO_ESYNC)")
         _set_icon(self.proton_no_esync, "sync")
         self.proton_no_esync.setProperty("accent", "teal")
@@ -367,15 +278,16 @@ class DetailPanel(QWidget):
         self.lsfg_disable_check.setProperty("accent", "neutral")
         controls_layout.addWidget(self.lsfg_disable_check)
 
-        lsfg_card = Card(ICONS["lsfg"], "lsfg-vk", tag="Lossless Scaling", checkable=True)
+        self._lsfg_box_base_title = "lsfg-vk (Lossless Scaling)"
+        lsfg_card = QGroupBox(self._lsfg_box_base_title)
+        lsfg_card.setCheckable(True)
         self.lsfg_card = lsfg_card
-        self.lsfg_box = lsfg_card.switch
-        lsfg_form = lsfg_card.form
+        self.lsfg_box = lsfg_card
+        lsfg_form = QFormLayout(lsfg_card)
         lsfg_hint = QLabel(
             "Requer lsfg-vk instalado a parte e o Lossless Scaling na sua"
             " biblioteca Steam (fornece a Lossless.dll)."
         )
-        lsfg_hint.setObjectName("cardHint")
         lsfg_hint.setWordWrap(True)
         lsfg_form.addRow(lsfg_hint)
         self.lsfg_profile = QLineEdit()
@@ -706,11 +618,10 @@ class DetailPanel(QWidget):
         proton_active = sum(
             [proton["no_esync"], proton["no_fsync"], proton["enable_nvapi"], bool(proton["vkd3d_config"])]
         )
-        self.proton_card.set_badge(
-            f"{proton_active} ativa{'s' if proton_active != 1 else ''}" if proton_active else ""
-        )
-
-        self.gamescope_card.set_badge("ativo" if self.gamescope_box.isChecked() else "")
+        proton_title = self._proton_box_base_title
+        if proton_active:
+            proton_title += f" — {proton_active} ativa{'s' if proton_active != 1 else ''}"
+        self.proton_card.setTitle(proton_title)
 
         if self.lsfg_box.isChecked():
             lsfg_active = sum(
@@ -723,7 +634,10 @@ class DetailPanel(QWidget):
             )
         else:
             lsfg_active = 0
-        self.lsfg_card.set_badge(f"{lsfg_active} ativa{'s' if lsfg_active != 1 else ''}" if lsfg_active else "")
+        lsfg_title = self._lsfg_box_base_title
+        if lsfg_active:
+            lsfg_title += f" — {lsfg_active} ativa{'s' if lsfg_active != 1 else ''}"
+        self.lsfg_card.setTitle(lsfg_title)
 
     def _apply(self):
         if not self.game:
@@ -789,28 +703,14 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Horizontal)
         main_layout.addWidget(splitter, 1)
 
-        games_panel = QWidget()
-        games_panel_layout = QVBoxLayout(games_panel)
-        games_panel_layout.setContentsMargins(14, 12, 14, 8)
-        games_panel_layout.setSpacing(8)
-
-        library_header = QHBoxLayout()
-        library_title = QLabel("Biblioteca")
-        library_title.setObjectName("libraryTitle")
-        library_header.addWidget(library_title)
-        self.library_count = QLabel("")
-        self.library_count.setObjectName("libraryCount")
-        library_header.addWidget(self.library_count)
-        library_header.addStretch(1)
-        games_panel_layout.addLayout(library_header)
-
-        self.games_list = QListWidget()
-        self.games_list.setSelectionMode(QListWidget.SingleSelection)
-        self.games_list.setEditTriggers(QListWidget.NoEditTriggers)
-        self.games_list.setSpacing(2)
-        self.games_list.itemSelectionChanged.connect(self._on_row_selected)
-        games_panel_layout.addWidget(self.games_list, 1)
-        splitter.addWidget(games_panel)
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(["Jogo", "AppID", "Opcoes"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SingleSelection)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.itemSelectionChanged.connect(self._on_row_selected)
+        splitter.addWidget(self.table)
 
         self.detail = DetailPanel(on_apply=self._on_game_applied)
         splitter.addWidget(self.detail)
@@ -874,21 +774,18 @@ class MainWindow(QMainWindow):
             })
         self.games.sort(key=lambda g: g["name"].lower())
 
-        self._refresh_games_list()
-        self.games_list.setCurrentRow(-1)
+        self._refresh_table()
         self._update_status()
         self.detail.set_game(None)
 
-    def _refresh_games_list(self):
-        self.games_list.clear()
-        self.library_count.setText(f"{len(self.games)} jogos")
-        for game in self.games:
-            chips, meta = summary_chips_for(game["value"], game["appid"], self.excluded)
-            row_widget = GameRowWidget(game["name"], game["appid"], chips, meta)
-            item = QListWidgetItem()
-            item.setSizeHint(row_widget.sizeHint())
-            self.games_list.addItem(item)
-            self.games_list.setItemWidget(item, row_widget)
+    def _refresh_table(self):
+        self.table.setRowCount(len(self.games))
+        for row, game in enumerate(self.games):
+            self.table.setItem(row, 0, QTableWidgetItem(game["name"]))
+            self.table.setItem(row, 1, QTableWidgetItem(game["appid"]))
+            self.table.setItem(
+                row, 2, QTableWidgetItem(summary_for(game["value"], game["appid"], self.excluded))
+            )
 
     def _flush_detail(self):
         """Grava no jogo selecionado o que esta no painel, mesmo sem clicar
@@ -900,11 +797,11 @@ class MainWindow(QMainWindow):
 
     def _on_row_selected(self):
         self._flush_detail()
-        row = self.games_list.currentRow()
-        if row < 0:
+        rows = self.table.selectionModel().selectedRows()
+        if not rows:
             self.detail.set_game(None)
             return
-        game = self.games[row]
+        game = self.games[rows[0].row()]
         self.detail.set_game(game)
 
     def _on_game_applied(self, game):
@@ -913,10 +810,7 @@ class MainWindow(QMainWindow):
         else:
             self.excluded.discard(game["appid"])
         row = self.games.index(game)
-        self._refresh_games_list()
-        self.games_list.blockSignals(True)
-        self.games_list.setCurrentRow(row)
-        self.games_list.blockSignals(False)
+        self.table.item(row, 2).setText(summary_for(game["value"], game["appid"], self.excluded))
 
     def _apply_bulk_default(self):
         count = 0
@@ -929,12 +823,8 @@ class MainWindow(QMainWindow):
                 core.set_value(game["value"], "LaunchOptions", new)
                 game["dirty"] = True
                 count += 1
-        current_game = self.detail.game
-        self._refresh_games_list()
-        if current_game:
-            self.games_list.blockSignals(True)
-            self.games_list.setCurrentRow(self.games.index(current_game))
-            self.games_list.blockSignals(False)
+        self._refresh_table()
+        if self.detail.game:
             self.detail._load_from_game()
         QMessageBox.information(self, "Aplicado", f"{count} jogo(s) atualizado(s) com gamemode+mangohud.")
 
